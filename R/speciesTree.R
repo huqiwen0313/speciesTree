@@ -151,30 +151,15 @@ TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 #' @param saveGraph if save the susample result
 #'
 #' @export
-subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=10, renameCluter=TRUE,
+subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=10,
                              stability.subsampling.fraction=0.95, saveGraph=T, prefix=NULL){
 
   cls <- rleiden.detection(g, K=3, resolution=c(0.5, 0.3, 0.3), min.community.size = 10)
 
-  # rename clusters
-  if(renameCluter){
-    tmp <- fv
-    label.table <- data.frame(old=as.character(unique(fv)), new=as.character(seq(1, length(unique(fv)), 1)),
-                              stringsAsFactors = FALSE)
-
-    # reassign label to groups
-    fv.new <- as.character(fv)
-
-    fv.new <- as.character(match(fv.new, label.table$old))
-    fv <- fv.new
-    names(fv) <- names(tmp)
-  }
-
-}
   leafcontent <- getLeafcontent(cls)
 
   cls.mem <- membership(cls)
-  cls.groups <- factor(setNames(as.character(cls.mem),names(cls.mem)),levels=1:max(cls.mem))
+  cls.groups <- as.factor(cls.mem)
   cls.levs <- levels(cls.groups)
 
   sr <- NULL
