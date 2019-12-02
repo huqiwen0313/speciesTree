@@ -21,6 +21,7 @@ getLeafcontentFlat <- function(cls.groups){
   return(leafcontent)
 }
 
+#'
 transferLeaflabel <- function(leafcontent, cellannot){
   leafcontentAnnot <- lapply(leafcontent, function(x){cellannot[names(cellannot) %in% x]})
   return(leafcontentAnnot)
@@ -108,6 +109,10 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
 }
 
 #' Change the format of tree
+#' @param dend dendrogram object
+#' @param renameCluster if rename the leafnode
+#' @param cls.groups factor contains celltype annotation
+#' @return list contains dendrogram obj, cells per leaf node and transfered table
 #' @export
 TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 
@@ -133,7 +138,8 @@ TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 
     leafcontent <- getLeafcontentFlat(cls.groups.new)
   } else {
-    leafcontent <- getLeafcontent(cls.groups)
+    leafcontent <- getLeafcontentFlat(cls.groups)
+    label.table <- NULL
   }
   return(list(dendrogram=dend, leafcontent=leafcontent, label.table=label.table))
 }
@@ -141,14 +147,30 @@ TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 #' subsampling graph
 #' @param g igraph obj
 #' @param stability.subsample # of subsampling
+#' @param method clustering algorithm (e.g. walktrap, leiden etc)
 #' @param saveGraph if save the susample result
 #'
 #' @export
-subSamplingGraph <- function(g, step=10, method=igraph::walktrap.community, stability.subsamples=10,
+subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=10, renameCluter=TRUE,
                              stability.subsampling.fraction=0.95, saveGraph=T, prefix=NULL){
 
-  cls <- method(g)
+  cls <- rleiden.detection(g, K=3, resolution=c(0.5, 0.3, 0.3), min.community.size = 10)
 
+  # rename clusters
+  if(renameCluter){
+    tmp <- fv
+    label.table <- data.frame(old=as.character(unique(fv)), new=as.character(seq(1, length(unique(fv)), 1)),
+                              stringsAsFactors = FALSE)
+
+    # reassign label to groups
+    fv.new <- as.character(fv)
+
+    fv.new <- as.character(match(fv.new, label.table$old))
+    fv <- fv.new
+    names(fv) <- names(tmp)
+  }
+
+}
   leafcontent <- getLeafcontent(cls)
 
   cls.mem <- membership(cls)
@@ -160,7 +182,7 @@ subSamplingGraph <- function(g, step=10, method=igraph::walktrap.community, stab
     if(!is.null(seed)) { set.seed(seed) }
     vi <- sample(1:length(V(g)), ceiling(length(V(g))*(f)))
     sg <- induced_subgraph(g,vi)
-    t <- method(sg)
+    t <- method(sg,  K=3, resolution=c(0.5, 0.3, 0.3), min.community.size = 10)
     if(is.null(cut)){
       return(t)
     } else{
@@ -174,15 +196,15 @@ subSamplingGraph <- function(g, step=10, method=igraph::walktrap.community, stab
     sr <- conos:::papply(1:stability.subsamples, function(i) subset.clustering(g,f=stability.subsampling.fraction,seed=i), n.cores=20)
   }
 
-  # save walktrap graph
+  # save subsampled graph
   if(saveGraph == T){
     if(is.null(prefix)){
-      saveRDS(list(walkstrap.mem=cls, subsample.mem=sr), "walktrap.result.rds")
+      saveRDS(list(mem=cls, subsample.mem=sr), "graph.membership.rds")
     } else{
-      saveRDS(list(walkstrap.mem=cls, subsample.mem=sr), paste(prefix, "walktrap.result.rds", sep="."))
+      saveRDS(list(mem=cls, subsample.mem=sr), paste(prefix, "graph.membership.rds", sep="."))
     }
   }
-  return(list(walkstrap.mem=cls, subsample.mem=sr))
+  return(list(mem=cls, subsample.mem=sr))
 }
 
 #' return stability score based on walktrap in hierachical structure
@@ -237,24 +259,22 @@ TreeStability <- function(g, dend, cls.groups, cls.subsamples, stability.subsamp
 
 # Caculate flat stability score based subsampling clusters
 #' @export
-TreeStabilityFlat <- function(dend, rleiden.cluster=TRUE, cls.groups, cls.subsamples, n.cores=10){
+TreeStabilityFlat <- function(cls.groups, cls.subsamples, n.cores=10){
 
   jc.stats <- do.call(rbind,conos:::papply(cls.subsamples, function(o) {
     p1 <- membership(o);
     p2 <- cls.groups[names(p1)]; p1 <- as.character(p1)
     x <- tapply(1:length(p2),p2,function(i1) {
       i2 <- which(p1==p1[i1[[1]]])
-      length(intersect(i1,i2))/length(unique(c(i1,i2)))
+      length(intersect(i1, i2))/length(unique(c(i1,i2)))
     })
   },n.cores=n.cores,mc.preschedule=T))
 
   # Adjusted rand index
-  if(verbose) cat("adjusted Rand ... ")
   ari <- unlist(conos:::papply(sr,function(o) { ol <- membership(o); adjustedRand(as.integer(ol),
                                                                                   as.integer(cls.groups[names(ol)]),randMethod='HA') },n.cores=n.cores))
-  if(verbose) cat("done\n");
-
-  res$stability <- list(flat=list(jc=jc.stats,ari=ari))
+  stability <- list(flat=list(jc=jc.stats,ari=ari))
+  return(stability)
 }
 
 #' Add attribute into the tree
@@ -622,6 +642,7 @@ prunningTree <- function(d, fac, leafContent, minSize=20){
 }
 
 #' cross-species mapping summary: 1:1, or many:many
+#' @export
 clusterMappingSummary <- function(leafannot, prefix="bi", speciesNames=c("marmo", "human"), cutoff=0.01){
   # leafannot: list contains celltype annotation for each leafnode
   # prefix: prefix in cells that distinguish two species
@@ -641,3 +662,93 @@ clusterMappingSummary <- function(leafannot, prefix="bi", speciesNames=c("marmo"
   MappingStat <- do.call(rbind, MappingStat)
   return(MappingStat)
 }
+
+#' Run recursive leiden clustering algorithm - modified from conos (https://github.com/hms-dbmi/conos)
+#'
+#' @param graph igraph object
+#' @export
+
+rleiden.detection <- function(graph, K=2, renameCluter=TRUE, n.cores=parallel::detectCores(logical=F),
+                              min.community.size=10, verbose=FALSE, resolution=1, K.current=1, hierarchical=FALSE, ...){
+
+  if(verbose & K.current==1) cat(paste0("running ",K,"-recursive Leiden clustering: "));
+  if(length(resolution)>1) {
+    if(length(resolution)!=K) { stop("resolution value must be either a single number or a vector of length K")}
+    res <- resolution[K.current]
+  } else { res <- resolution }
+  mt <- leiden.community(graph, resolution=res, ...);
+
+  mem <- membership(mt);
+  tx <- table(mem)
+  ivn <- names(tx)[tx<min.community.size]
+  if(length(ivn)>1) {
+    mem[mem %in% ivn] <- as.integer(ivn[1]); # collapse into one group
+  }
+  if(verbose) cat(length(unique(mem)),' ');
+
+  if(K.current<K) {
+    # start recursive run
+    if(n.cores>1) {
+      wtl <- mclapply(conos:::sn(unique(mem)), function(cluster) {
+        cn <- names(mem)[which(mem==cluster)]
+        sg <- induced.subgraph(graph,cn)
+        rleiden.detection(induced.subgraph(graph,cn), K=K, resolution=resolution, K.current=K.current+1,
+                          min.community.size=min.community.size, hierarchical=hierarchical, verbose=verbose, n.cores=n.cores)
+      },mc.cores=n.cores,mc.allow.recursive = FALSE)
+    } else {
+      wtl <- lapply(conos:::sn(unique(mem)), function(cluster) {
+        cn <- names(mem)[which(mem==cluster)]
+        sg <- induced.subgraph(graph,cn)
+        rleiden.detection(induced.subgraph(graph,cn), K=K, resolution=resolution, K.current=K.current+1,
+                          min.community.size=min.community.size, hierarchical=hierarchical, verbose=verbose, n.cores=n.cores)
+      })
+    }
+    # merge clusters, cleanup
+    mbl <- lapply(wtl,membership);
+    # combined clustering factor
+    fv <- unlist(lapply(names(wtl),function(cn) {
+      paste(cn,as.character(mbl[[cn]]),sep='-')
+    }))
+    names(fv) <- unlist(lapply(mbl,names))
+  } else {
+    fv <- mem;
+    if(hierarchical) {
+      # use walktrap on the last level
+      wtl <- conos:::papply(conos:::sn(unique(mem)), function(cluster) {
+        cn <- names(mem)[which(mem==cluster)]
+        sg <- induced.subgraph(graph,cn)
+        res <- walktrap.community(induced.subgraph(graph,cn))
+        res$merges <- igraph:::complete.dend(res,FALSE)
+        res
+      },n.cores=n.cores)
+    }
+  }
+
+  if(K.current==1) {
+    if(verbose) {
+      cat(paste0(' detected a total of ',length(unique(fv)),' clusters '));
+      cat("done\n");
+    }
+    # rename clusters
+    if(renameCluter){
+      tmp <- fv
+      label.table <- data.frame(old=as.character(unique(fv)), new=as.character(seq(1, length(unique(fv)), 1)),
+                                stringsAsFactors = FALSE)
+
+      # reassign label to groups
+      fv.new <- as.character(fv)
+
+      fv.new <- as.character(match(fv.new, label.table$old))
+      fv <- fv.new
+      names(fv) <- names(tmp)
+    }
+
+  }
+
+  # enclose in a masquerading class
+  combd <- NULL
+  res <- list(membership=fv,dendrogram=combd,algorithm='rleiden');
+  class(res) <- rev("fakeCommunities")
+  return(res)
+}
+
