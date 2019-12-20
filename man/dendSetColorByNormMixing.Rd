@@ -4,7 +4,7 @@
 \alias{dendSetColorByNormMixing}
 \title{colored tree by species mixing based on normalized value}
 \usage{
-dendSetColorByNormMixing(d, colorpallete)
+dendSetColorByNormMixing(d)
 }
 \description{
 colored tree by species mixing based on normalized value

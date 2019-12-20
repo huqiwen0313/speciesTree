@@ -2,12 +2,27 @@
 % Please edit documentation in R/speciesTree.R
 \name{TreeStability}
 \alias{TreeStability}
-\title{return stability score based on walktrap in hierachical structure}
+\title{return stability scores for each node by searching for optimal matching tree}
 \usage{
-TreeStability(g, dend, cls.groups, cls.subsamples,
-  stability.subsamples = 10, stability.subsampling.fraction = 0.95,
-  min.group.size = 30, n.cores = 10)
+TreeStability(
+  dataobj,
+  dend,
+  algorithm = "expression",
+  cls.groups,
+  cls.subsamples,
+  stability.subsamples = 10,
+  stability.subsampling.fraction = 0.95,
+  min.group.size = 30,
+  n.cores = 10
+)
+}
+\arguments{
+\item{dataobj}{igraph object if algorithm=walktrap, conos or gene expression matrix if algorithm=expression}
+
+\item{dend}{original dendrogram}
+
+\item{algorithm}{algorithms for contruct hierachical tree in subsamples: walktrap or based on expression (expression)}
 }
 \description{
-return stability score based on walktrap in hierachical structure
+return stability scores for each node by searching for optimal matching tree
 }

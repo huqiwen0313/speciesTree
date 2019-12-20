@@ -9,6 +9,9 @@ getLeafcontentFlat(cls.groups)
 \arguments{
 \item{cls.groups}{factor contains celltype annotation for each cell}
 }
+\value{
+a list contains cells from every leaf
+}
 \description{
 get leaf information from cell annotation
 }

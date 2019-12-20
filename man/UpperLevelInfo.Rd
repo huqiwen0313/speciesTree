@@ -6,6 +6,13 @@
 \usage{
 UpperLevelInfo(d, cellannot, leafContent, propCutoff = 0.15)
 }
+\arguments{
+\item{d:}{dendrogram}
+
+\item{cellannot:}{factor contains upperlevel annotation for each cell}
+
+\item{leafContent:}{cells for each leaf node}
+}
 \description{
 add upperlevel attributes into the tree
 }

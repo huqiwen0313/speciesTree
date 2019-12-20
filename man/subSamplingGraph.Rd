@@ -4,12 +4,19 @@
 \alias{subSamplingGraph}
 \title{subsampling graph}
 \usage{
-subSamplingGraph(g, step = 10, method = igraph::walktrap.community,
-  stability.subsamples = 10, stability.subsampling.fraction = 0.95,
-  saveGraph = T, prefix = NULL)
+subSamplingGraph(
+  g,
+  method = rleiden.detection,
+  stability.subsamples = 10,
+  stability.subsampling.fraction = 0.95,
+  saveGraph = T,
+  prefix = NULL
+)
 }
 \arguments{
 \item{g}{igraph obj}
+
+\item{method}{clustering algorithm (e.g. walktrap, leiden etc)}
 
 \item{saveGraph}{if save the susample result}
 

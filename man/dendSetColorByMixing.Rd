@@ -2,9 +2,9 @@
 % Please edit documentation in R/speciesTree.R
 \name{dendSetColorByMixing}
 \alias{dendSetColorByMixing}
-\title{Color tree based on mixing of species}
+\title{Color tree based on mixing of species - unnormalized}
 \usage{
-dendSetColorByMixing(d, fac, leafContent, colorpallete)
+dendSetColorByMixing(d, fac, leafContent, normTofac = TRUE)
 }
 \arguments{
 \item{d}{dendrogram obj}
@@ -18,5 +18,5 @@ e.g. colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)}
 colored dendrogram
 }
 \description{
-Color tree based on mixing of species
+Color tree based on mixing of species - unnormalized
 }

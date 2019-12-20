@@ -11,21 +11,72 @@ getLeafcontent <- function(cls){
 
 #' get leaf information from cell annotation
 #' @param cls.groups factor contains celltype annotation for each cell
-#' @ return a list contains cells from every leaf
+#' @return a list contains cells from every leaf
 #' @export
 getLeafcontentFlat <- function(cls.groups){
   leafcontent <- list()
+  if(class(cls.groups) == "factor"){
+    tmp <- as.character(cls.groups)
+    names(tmp) <- names(cls.groups)
+    cls.groups <- tmp
+  }
   for(i in 1:length(unique(as.numeric(cls.groups)))){
     leafcontent[[i]] <- names(cls.groups[which(as.numeric(cls.groups)==i)])
   }
   return(leafcontent)
 }
 
-#'
+#' mapping leaf cells to cell annotation
 transferLeaflabel <- function(leafcontent, cellannot){
   leafcontentAnnot <- lapply(leafcontent, function(x){cellannot[names(cellannot) %in% x]})
   return(leafcontentAnnot)
 }
+
+#' caculate jacard coefficiency from best maching tree
+#' @param res either subsampled hierarchical graphs or a list contains merge matrix that have the similar format as igraph:::complete.dend
+bestClusterTreeThresholds <- function (res, leaf.factor, clusters, clmerges = NULL){
+  clusters <- as.factor(clusters)
+  #cl <- as.integer(as.character(clusters[names(leaf.factor)]))
+  cl <- as.integer(clusters[names(leaf.factor)])
+  clT <- tabulate(cl, nbins = length(levels(clusters)))
+  mt <- table(cl, leaf.factor)
+  if(class(res) != "list"){
+    merges <- igraph:::complete.dend(res, FALSE)
+  }
+
+  if (is.null(clmerges)) {
+    x <- conos:::treeJaccard(res$merges - 1L, as.matrix(mt),
+                             clT)
+    names(x$threshold) <- levels(clusters)
+  }
+  else {
+    x <- conos:::treeJaccard(res$merges - 1L, as.matrix(mt),
+                             clT, clmerges - 1L)
+  }
+  x
+}
+
+## testing
+bestClusterThresholds <- function (res, leaf.factor, clusters, clmerges = NULL) {
+  clusters <- as.factor(clusters)
+  #cl <- as.integer(clusters[res$names])
+  cl <- as.integer(as.character(clusters[names(leaf.factor)]))
+  clT <- tabulate(cl, nbins = length(levels(clusters)))
+  #res$merges <- igraph:::complete.dend(res, FALSE)
+  if(class(res) != "list"){
+    merges <- igraph:::complete.dend(res, FALSE)
+  }
+
+  if (is.null(clmerges)) {
+    x <- conos:::treeJaccard(res$merges - 1L, matrix(cl - 1L, nrow = 1), clT)
+    names(x$threshold) <- levels(clusters)
+  }
+  else {
+    x <- conos:::treeJaccard(res$merges - 1L, matrix(cl -1L, nrow = 1), clT, clmerges - 1L)
+  }
+  x
+}
+
 
 #' mapping leaf node according to cell annotation
 #' @param d dendrogram
@@ -51,11 +102,11 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
       if(length(human.annot) > 0){
         #percentage <- round(table(human.annot)/length(human.annot), 2)
         maxProbLabel <- names(table(human.annot))[which(table(human.annot) == max(table(human.annot)))][1]
-        percentage <- table(human.annot)[names(table(human.annot)) == maxProbLabel] / totalCells[names(totalCells) == maxProbLabel]
+        percentage <- table(human.annot)[names(table(human.annot)) == maxProbLabel] / (totalCells[names(totalCells) == maxProbLabel] + 1)
         percentage <- round(percentage, 2)
 
         # calculate purity of branch
-        percentage.Pop <- table(human.annot)[names(table(human.annot)) == maxProbLabel] / sum(totalPopCells)
+        percentage.Pop <- table(human.annot)[names(table(human.annot)) == maxProbLabel] / (sum(totalPopCells) + 1)
         percentage.Pop <- round(percentage.Pop, 2)
 
         if(percentage > 0.05 | length(grep("bi", names(r))) == 0){
@@ -64,11 +115,11 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
           marmo.annot <- r[grep("bi", names(r))]
           totalPopCells <- table(marmo.annot)
           maxProbLabel <- names(table(marmo.annot))[which(table(marmo.annot) == max(table(marmo.annot)))][1]
-          percentage <- table(marmo.annot)[names(table(marmo.annot)) == maxProbLabel] / totalCells[names(totalCells) == maxProbLabel]
+          percentage <- table(marmo.annot)[names(table(marmo.annot)) == maxProbLabel] / (totalCells[names(totalCells) == maxProbLabel] + 1)
           percentage <- round(percentage, 2)
 
           # calculate purity of branch
-          percentage.Pop <- table(marmo.annot)[names(table(marmo.annot)) == maxProbLabel] / sum(totalPopCells)
+          percentage.Pop <- table(marmo.annot)[names(table(marmo.annot)) == maxProbLabel] / (sum(totalPopCells) + 1)
           percentage.Pop <- round(percentage.Pop, 2)
 
           paste(maxProbLabel, "(", percentage.Pop, "/", percentage, ")", sep = "")
@@ -76,12 +127,13 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
 
       } else{
         #percentage <- round(table(r)/length(r), 2)
+        totalPopCells <- table(r)
         maxProbLabel <- names(table(r))[which(table(r) == max(table(r)))][1]
-        percentage <- table(r)[names(table(r)) == maxProbLabel] / totalCells[names(totalCells) == maxProbLabel]
+        percentage <- table(r)[names(table(r)) == maxProbLabel] / (totalCells[names(totalCells) == maxProbLabel] + 1)
         percentage <- round(percentage, 2)
 
         # calculate purity of branch
-        percentage.Pop <- table(r)[names(table(r)) == maxProbLabel] / sum(totalPopCells)
+        percentage.Pop <- table(r)[names(table(r)) == maxProbLabel] / (sum(totalPopCells) + 1)
         percentage.Pop <- round(percentage.Pop, 2)
 
         paste(maxProbLabel, "(", percentage.Pop, "/", percentage, ")", sep = "")
@@ -91,11 +143,11 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
     leaftransfer <- lapply(leaftransfer, function(r){
       #map human annotation
       maxProbLabel <- names(table(r))[which(table(r) == max(table(r)))][1]
-      percentage <- table(r)[names(table(r)) == maxProbLabel] / totalCells[names(totalCells) == maxProbLabel]
+      percentage <- table(r)[names(table(r)) == maxProbLabel] / (totalCells[names(totalCells) == maxProbLabel] + 1)
       percentage <- round(percentage, 3)
 
       # calculate purity of branch
-      percentage.Pop <- table(r)[names(table(r)) == maxProbLabel] / sum(table(r))
+      percentage.Pop <- table(r)[names(table(r)) == maxProbLabel] / (sum(table(r)) + 1)
       percentage.Pop <- round(percentage.Pop, 2)
 
       paste(maxProbLabel, "(", percentage.Pop, "/", percentage, ")", sep = "")
@@ -108,11 +160,52 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
   return(leaftransfer)
 }
 
+#' assign attribute value to dendrogram
+#' @param dend dendrogram obj
+#' @param attribute attribute name
+#' @param value vector contains attribute values
+#' @return dendrogram obj with new attributes added to each node
+#' @export
+assign_values_to_nodes <- function(dend, attribute, value){
+  if (!is.dendrogram(dend)) stop("'dend' should be a dendrogram.")
+
+  if (missing(value)) {
+    warning("value is missing, returning the dendrogram as is.")
+    return(dend)
+  }
+
+  nodes_length <- nnodes(dend) # length(labels(dend)) # it will be faster to use order.dendrogram than labels...
+  if (nodes_length > length(value)) {
+    if (warn) warning("Length of value vector was shorter than the number of nodes - vector value recycled")
+    value <- rep(value, length.out = nodes_length)
+  }
+
+  set_value_to_node <- function(dend_node) {
+    i_node_number <<- i_node_number + 1
+
+    to_update_attr <- !is.infinite(value[i_node_number]) | is.na(value[i_node_number])
+    if (to_update_attr) {
+      # if(!is.infinite2(value[i_node_number])) {
+      attr(dend_node, attribute) <- value[i_node_number]
+    }
+
+    if (length(attr(dend_node, attribute)) == 0) {
+      attr(dend_node, attribute) <- NULL # remove attribute if it is empty
+    }
+    return(unclass(dend_node))
+  }
+
+  i_node_number <- 0
+  new_dend <- dendrapply(dend, set_value_to_node)
+  class(new_dend) <- "dendrogram"
+  return(new_dend)
+}
+
 #' Change the format of tree
 #' @param dend dendrogram object
 #' @param renameCluster if rename the leafnode
 #' @param cls.groups factor contains celltype annotation
-#' @return list contains dendrogram obj, cells per leaf node and transfered table
+#' @return list contains dendrogram obj, cells per leaf node and transfered groups
 #' @export
 TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 
@@ -139,9 +232,9 @@ TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
     leafcontent <- getLeafcontentFlat(cls.groups.new)
   } else {
     leafcontent <- getLeafcontentFlat(cls.groups)
-    label.table <- NULL
+    cls.groups.new <- NULL
   }
-  return(list(dendrogram=dend, leafcontent=leafcontent, label.table=label.table))
+  return(list(dendrogram=dend, leafcontent=leafcontent, new.groups=cls.groups.new))
 }
 
 #' subsampling graph
@@ -154,7 +247,7 @@ TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=10,
                              stability.subsampling.fraction=0.95, saveGraph=T, prefix=NULL){
 
-  cls <- rleiden.detection(g, K=3, resolution=c(0.5, 0.3, 0.3), min.community.size = 10)
+  cls <- rleiden.detection(g, K=3, resolution=c(0.7, 0.3, 0.3), min.community.size = 10)
 
   leafcontent <- getLeafcontent(cls)
 
@@ -167,7 +260,7 @@ subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=1
     if(!is.null(seed)) { set.seed(seed) }
     vi <- sample(1:length(V(g)), ceiling(length(V(g))*(f)))
     sg <- induced_subgraph(g,vi)
-    t <- method(sg,  K=3, resolution=c(0.5, 0.3, 0.3), min.community.size = 10)
+    t <- method(sg,  K=4, resolution=c(0.7, 0.3, 0.3, 0.3), min.community.size = 10)
     if(is.null(cut)){
       return(t)
     } else{
@@ -192,10 +285,92 @@ subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=1
   return(list(mem=cls, subsample.mem=sr))
 }
 
-#' return stability score based on walktrap in hierachical structure
+#' generate subsampled dendrograms from gene expression matrix
+#' @param counts scaled count matrix - rows are cells, colums are genes
+#' @param cls.group original group to subsample
+#' @param subsample.group list contains subsampled groups
 #' @export
-TreeStability <- function(g, dend, cls.groups, cls.subsamples, stability.subsamples=10,
+subSampleTree <- function(counts, cls.groups=NULL, subsample.groups=NULL, stability.subsamples=10, Variablegenes=NULL,
+                             stability.subsampling.fraction=0.95, renameCluster=FALSE){
+  if(is.null(cls.groups) & is.null(subsample.groups)){
+    stop('need to specify either orignal groups or subsample groups')
+  } else if(!is.null(cls.groups)){
+    groups <- as.factor(cls.groups)
+  }
+
+  useVariablegenes = TRUE
+  if(is.null(Variablegenes)){
+    useVariablegenes = FALSE
+  }
+
+  sr <- NULL
+  if(!is.null(cls.groups)){
+    subsampling.cells <- function(counts, f=stability.subsampling.fraction, seed=NULL){
+      if(!is.null(seed)) { set.seed(seed) }
+      samples.loc <- sample(1:nrow(counts), ceiling(nrow(counts)*(f)))
+      sampled.counts <- counts[samples.loc, ]
+      sub.cls.groups <- cls.groups[names(cls.groups) %in% rownames(sampled.counts)]
+
+      d <- cluster.matrix.expression.distances(sampled.counts, groups=cls.groups, dist="cor", useVariablegenes=useVariablegenes, variableGenes=Variablegenes,
+                                               use.single.cell.comparisons=TRUE, use.scaled.data=TRUE)
+      dendr <- hclust(as.dist(d), method='ward.D2')
+      dend <- as.dendrogram(dendr)
+      dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = sub.cls.groups)
+      if(renameCluster){
+        sub.cls.groups <- dendr$new.groups
+      }
+      return(list(dend=dendr$dendrogram, clusters=sub.cls.groups))
+    }
+
+    if(is.null(sr)){
+      sr <- parallel::mclapply(1:stability.subsamples, function(i) subsampling.cells(counts, f=stability.subsampling.fraction, seed=i), mc.cores=2)
+    }
+  } else{
+    # have subsampled groups
+    subsampling.cells <- function(counts, subsampled.groups, seed=NULL){
+      sampled.counts <- counts[rownames(counts) %in% names(subsampled.groups), ]
+      d <- cluster.matrix.expression.distances(sampled.counts, groups=subsampled.groups, dist="cor", useVariablegenes=useVariablegenes,
+                                               variableGenes=Variablegenes, use.single.cell.comparisons=FALSE, use.scaled.data=FALSE)
+      if(any(is.na(d))){
+        d[is.na(d)] <- 0
+      }
+      dendr <- hclust(as.dist(d), method='ward.D2')
+      dend <- as.dendrogram(dendr)
+      dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = subsampled.groups)
+      if(renameCluster){
+        subsampled.groups <- dendr$new.groups
+      }
+      return(list(dend=dendr$dendrogram, clusters=subsampled.groups))
+    }
+    if(is.null(sr)){
+      sr <- parallel::mclapply(1:length(subsample.groups), function(i) subsampling.cells(counts, subsample.groups[[i]], seed=i), mc.cores=5)
+    }
+  }
+  return(sr)
+}
+
+#' return stability scores for each node by searching for optimal matching tree
+#' @param dataobj igraph object if algorithm=walktrap, conos or gene expression matrix if algorithm=expression
+#' @param dend original dendrogram
+#' @param algorithm algorithms for contruct hierachical tree in subsamples: walktrap or based on expression (expression)
+#' @export
+TreeStability <- function(dataobj, dend, algorithm="expression", cls.groups, cls.subsamples, stability.subsamples=10,
                           stability.subsampling.fraction=0.95, min.group.size=30, n.cores=10){
+
+  supported.algorithms <- c("walktrap", "expression")
+  if(!algorithm %in% supported.algorithms) {
+    stop(paste0("only the following algorithm are currently supported: [",paste(supported.algorithms, collapse=' '),"]"))
+  }
+
+  if(algorithm == "walktrap"){
+    if(!class(dataobj) == "igraph"){
+      stop("Please provide an igraph object for walktrap algorithm")
+    }
+  } else if(algorithm == "expression"){
+    if(!class(dataobj) == "Conos" & !class(dataobj) == "matrix"){
+      stop("Please provide an conos object or matrix for expression algorithm")
+    }
+  }
 
   cls.groups <- as.factor(cls.groups)
   cls.levs <- levels(cls.groups)
@@ -206,21 +381,28 @@ TreeStability <- function(g, dend, cls.groups, cls.subsamples, stability.subsamp
   # transform to igraph format
   nleafs <- nrow(clm) + 1; clm[clm>0] <- clm[clm>0] + nleafs; clm[clm<=nleafs] <- -1*clm[clm<=nleafs]
 
-  jc.hstats <- do.call(rbind, mclapply(cls.subsamples, function(st1) {
-    mf <- as.factor(st1)
-    st1g <- conos:::getClusterGraph(g, mf, plot=F, normalize=T)
-    st1w <- walktrap.community(st1g, steps=8)
+  jc.hstats <- do.call(rbind, parallel::mclapply(cls.subsamples, function(st1){
+    mf <- as.factor(membership(st1))
+    if(algorithm == "walktrap"){
+      st1g <- conos:::getClusterGraph(g, mf, plot=F, normalize=T)
+      st1w <- walktrap.community(st1g, steps=8)
+    } else if(algorithm == "expression"){
 
-    x <- conos:::bestClusterTreeThresholds(st1w, mf, cls.groups, clm)
+      # contruct tree structure
+      ## for testing
+      #source("~pkharchenko/m/pavan/DLI/conp2.r")
+      d <- cluster.expression.distances(dataobj, groups=mf, dist='JS', min.cluster.size=1, min.samples=1, n.cores=1)
+      subtreedend <- hclust(cluster::daisy(d), method='average')
+      merges <- subtreedend$merge
+      # transform to igraph format
+      nleafs <- nrow(merges) + 1; merges[merges>0] <- merges[merges>0] + nleafs;
+      merges[merges<=nleafs] <- -1*merges[merges<=nleafs]
+      ###
+      st1w = list(merges=merges)
+    }
+    x <- bestClusterTreeThresholds(st1w, mf, cls.groups, clm)
     x$threshold
   }, mc.cores=n.cores))
-
-  jc.hstats <- apply(jc.hstats, 1, function(x){
-    if(length(grep("Error", x)) == 0){
-      as.numeric(x)
-    }
-  })
-  jc.hstats <- do.call(rbind, jc.hstats)
 
   stability <- list()
   stability$upper.tree <- clm
@@ -239,7 +421,83 @@ TreeStability <- function(g, dend, cls.groups, cls.subsamples, stability.subsamp
   to <- t.dfirst(hc$merge)
   x <- apply(jc.hstats, 2, median)
 
-  return(list(dendrogram=dend, stability=xy, labels=round(x[to], 2), leafcontent=leafcontent))
+  return(list(dendrogram=dend, stability.loc=xy, stability.labels=round(x[to], 2)))
+}
+
+#' caculate stability only based on dendrogram and subsampled dendrograms
+#' @param dend original dendrogram
+#' @param cls.groups original cell clusters
+#' @param subsamples list contains subsampled dendrograms and correspondent cell clusters
+#' @import dendextend
+#' @export
+TreeStabilityDend <- function(dend, cls.groups, subsamples, n.cores=5){
+
+  cls.groups <- as.factor(cls.groups)
+  cls.levs <- levels(cls.groups)
+
+  hc <- as.hclust(dend)
+  clm <- hc$merge
+
+  # getting into the same order
+  cf <- factor(setNames(as.character(cls.groups), names(cls.groups)), levels=hc$labels)
+  # transform to igraph format
+  nleafs <- nrow(clm) + 1; clm[clm>0] <- clm[clm>0] + nleafs; clm[clm<=nleafs] <- -1*clm[clm<=nleafs]
+
+  jc.hstats <- do.call(rbind, parallel::mclapply(subsamples, function(st1){
+    mf <- as.factor(st1$clusters)
+    # remove non-numeric annotation
+    if(length(grep("singleton", mf)) > 0){
+      mf <- mf[-1*grep("singleton", mf)]
+    }
+
+    subdendr <- TransferDend(st1$dend, renameCluster=FALSE, mf)
+    subdend <- subdendr$dendrogram
+
+    subtreedend <- as.hclust(subdend)
+    # getting into the same order
+    mf <- factor(setNames(as.character(mf), names(mf)), levels=subtreedend$labels)
+
+    merges <- subtreedend$merge
+
+    # transform to igraph format
+    nleafs <- nrow(merges) + 1; merges[merges>0] <- merges[merges>0] + nleafs;
+    merges[merges<=nleafs] <- -1*merges[merges<=nleafs]
+    ###
+    st1w = list(merges=merges)
+
+    x <- bestClusterTreeThresholds(st1w, mf, cf, clm)
+    x$threshold
+  }, mc.cores=n.cores))
+
+  if(length(grep("Error", jc.hstats)) > 0){
+    loc <- unlist(lapply(1:nrow(jc.hstats), function(r){
+      if(length(grep("Error", jc.hstats[r, ])) > 0){
+        return(r)
+      }
+    }))
+    jc.hstats <- t(apply(jc.hstats[-loc, ], 1, as.numeric))
+  }
+
+  stability <- list()
+  stability$upper.tree <- clm
+  stability$sr <- cls.groups
+  stability$hierarchical <- list(jc=jc.hstats)
+
+  require(dendextend)
+  # depth-first traversal of a merge matrix
+  t.dfirst <- function(m,i=nrow(m)) {
+    rl <- m[i,1]; if(rl<0) { rl <- abs(rl) } else { rl <- t.dfirst(m,rl) }
+    rr <- m[i,2]; if(rr<0) { rr <- abs(rr) } else { rr <- t.dfirst(m,rr) }
+    c(i+nrow(m)+1,rl,rr)
+  }
+  xy <- get_nodes_xy(dend)
+  to <- t.dfirst(hc$merge)
+  x <- apply(jc.hstats, 2, median)
+
+  # set stability attr to dendrogram
+  #require(dendextend)
+  #set(dend, "stability") <- round(x[to], 2)
+  return(list(dendrogram=dend, stability.loc=xy, stability.labels=round(x[to], 2)))
 }
 
 # Caculate flat stability score based subsampling clusters
@@ -298,11 +556,11 @@ AddTreeAttribute <- function(d, fac, leafContent){
 }
 
 #' add upperlevel attributes into the tree
+#' @param d: dendrogram
+#' @param cellannot: factor contains upperlevel annotation for each cell
+#' @param leafContent: cells for each leaf node
 #' @export
 UpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
-  # d: dendrogram
-  # cellannot: factor contains upperlevel annotation for each cell
-  # leafContent: leafcontent structure for each cluster
 
   cbm <- function(d, cellannot){
     if(is.leaf(d)) {
@@ -337,7 +595,7 @@ UpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
   cbm(d, cellannot)
 }
 
-#' Get all upperlevel annotations
+#' Get all upperlevel annotations concanated with "+"
 #' @export
 AllUpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
   # Add all upper-level annotations in each branch concated with "+"
@@ -376,10 +634,9 @@ AllUpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
   cbm(d, cellannot)
 }
 
-
 #' get highest node with upperlevel information
 #' @export
-getUpperLevelNode <- function(d, cutoff=0.7){
+getUpperLevelNode <- function(dend, cutoff=0.7){
   # d: dendrogram with upperlevel and percentage features
 
   upperlabel <- dend %>% get_nodes_attr("upperlabel")
@@ -423,7 +680,7 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
   upperLevelnode <- data.frame(upperLevelnodes$xy, upperLabel=upperLevelnodes$upperlabel, height=upperLevelnodes$height)
 
   cbm <- function(d, cellannot){
-    if(is.leaf(d)) {
+    if(is.leaf(d)){
       upperlabel <- attr(d, 'upperlabel')
       height <- attr(d, 'height')
       percentage <- attr(d, 'percentage')
@@ -437,18 +694,20 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
           facs <- cc[2:4]
         }
 
-        facs <- facs/prop
-        normPercentage <- round((facs/sum(facs))[1], 2)
+        facs <- facs/(prop + 1)
+        normPercentage <- round((facs/sum(facs)), 2)
         attr(d, "normPercentage") <- normPercentage
+        attr(d, "normFac") <- facs
       } else{
         if(length(cc) == 3){
           facs <- cc[2:3]
         } else{
           facs <- cc[2:4]
         }
-        facs <- facs/facTotal
-        normPercentage <- round((facs/sum(facs))[1], 2)
+        facs <- facs/(facTotal + 1)
+        normPercentage <- round((facs/sum(facs)), 2)
         attr(d, "normPercentage") <- normPercentage
+        attr(d, "normFac") <- facs
       }
       return(d)
     } else {
@@ -465,18 +724,20 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
         } else{
           facs <- cc[2:4]
         }
-        facs <- facs/prop
-        normPercentage <- round((facs/sum(facs))[1], 2)
+        facs <- facs/(prop + 1)
+        normPercentage <- round((facs/sum(facs)), 2)
         attr(d, "normPercentage") <- normPercentage
+        attr(d, "normFac") <- facs
       } else{
         if(length(cc) == 3){
           facs <- cc[2:3]
         } else{
           facs <- cc[2:4]
         }
-        facs <- facs/facTotal
-        normPercentage <- round((facs/sum(facs))[1], 2)
+        facs <- facs/(facTotal + 1)
+        normPercentage <- round((facs/sum(facs)), 2)
         attr(d, "normPercentage") <- normPercentage
+        attr(d, "normFac") <- facs
       }
       return(d)
     }
@@ -484,8 +745,76 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
   cbm(d, cellannot)
 }
 
+#' caculate branch entropy attribute for normalized value
+#' @param d dendrogram
+#' @return add entropy attributes into the dendrogram
+#' @import entropy
+#' @export
+TreeEntropy <- function(d, entropy.cutoff=2.0){
+  cbm <- function(d){
+    if(is.leaf(d)) {
+      normpercentage <- attr(d, 'normPercentage')
+      if(is.null(normpercentage)){
+        stop("please normalize tree first..........")
+      }
+      normentropy <- entropy::entropy(normpercentage, method='MM', unit='log2')
+      attr(d, "entropy") <- normentropy
+      if(normentropy > entropy.cutoff){
+        attr(d, "nodePar")$pch <- 19
+        attr(d, "nodePar")$col <- "blue"
+      }
+      return(d)
+    } else{
+      oa <- attributes(d)
+      d <- lapply(d, cbm)
+      attributes(d) <- oa
+      normpercentage <- attr(d, 'normPercentage')
+      normentropy <- entropy::entropy(normpercentage, method='MM', unit='log2')
+      attr(d, "entropy") <- normentropy
+      if(normentropy > entropy.cutoff){
+        attr(d, "nodePar")$pch <- 19
+        attr(d, "nodePar")$col <- "blue"
+      }
+      return(d)
+    }
+  }
+  cbm(d)
+}
+
+#' caculate branch entropy attribute for normalized value
+#' @param d dendrogram
+#' @return add entropy attributes into the dendrogram
+#' @import entropy
+#' @export
+MarkMixedNode <- function(d, mixing.cutoff=0.3){
+  cbm <- function(d){
+    if(is.leaf(d)) {
+      normpercentage <- attr(d, 'normPercentage')
+      if(is.null(normpercentage)){
+        stop("please normalize tree first..........")
+      }
+
+      if(normpercentage[1]>mixing.cutoff & normpercentage[1]<0.4){
+        attr(d, "nodePar")$pch <- 19
+        attr(d, "nodePar")$col <- "blue"
+      }
+      return(d)
+    } else{
+      oa <- attributes(d)
+      d <- lapply(d, cbm)
+      attributes(d) <- oa
+      normpercentage <- attr(d, 'normPercentage')
+      if(normpercentage[1]>mixing.cutoff & normpercentage[1]<0.4){
+        attr(d, "nodePar")$pch <- 19
+        attr(d, "nodePar")$col <- "blue"
+      }
+      return(d)
+    }
+  }
+  cbm(d)
+}
+
 #' Set width of tree base on size of clusters
-#'
 #' @param d dendrogram obj
 #' @param scale scales to set branch size
 #' @return dendrogram with the width of branches indicates cluster size
@@ -510,7 +839,7 @@ dendSetWidthBysize <- function(d, scale=10){
   cbm(d,fac)
 }
 
-#' Color tree based on mixing of species
+#' Color tree based on mixing of species - unnormalized
 #'
 #' @param d dendrogram obj
 #' @param fac factor contains species and barcodes information
@@ -518,58 +847,111 @@ dendSetWidthBysize <- function(d, scale=10){
 #'          e.g. colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)
 #' @return colored dendrogram
 #' @export
-dendSetColorByMixing <- function(d,fac,leafContent, colorpallete){
+dendSetColorByMixing <- function(d, fac, leafContent, normTofac=TRUE){
   fac <- as.factor(fac);
   if(length(levels(fac))>3) stop("factor with more than 3 levels are not supported")
   if(length(levels(fac))<2) stop("factor with less than 2 levels are not supported")
 
   totalCells <- table(fac)
 
-  cc2col <- function(cc,base=0.1){
+  cc2col <- function(cc, rate=15, base=0.001){
     if(sum(cc)==0) {
       cc <- rep(1, length(cc))
     } else {
       # normalized by total number of cells
       if(length(cc) == 3){
-        cc <- round((cc[2:3]/totalCells)/sum(cc[2:3]/totalCells), 2)
+        if(normTofac){
+          cc <- round((cc[2:3]/totalCells)/sum(cc[2:3]/totalCells), 2)
+        } else{
+          cc <- round((cc[2:3])/sum(cc[2:3]), 2)
+        }
+        cv <- round(cc[1]*100, 0)
+        colorpallete <- colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)
+        col <- colorpallete[cv + 1]
+
       } else{
-        cc <- round((cc[2:4]/totalCells)/sum(cc[2:4]/totalCells), 2)
+        if(normTofac){
+          cc <- round((cc[2:4]/totalCells)/sum(cc[2:4])/totalCells, 2)
+        } else{
+          cc <- round((cc[2:4])/sum(cc[2:4]), 2)
+        }
+        cv <- cc
+        cv <- dexp(cv, rate)
+        cv <- cv/rate * (1-base)
+        col <- adjustcolor(rgb(cv[1],cv[2],cv[3], 1), offset = c(0.5, 0.5, 0.5, 0.1))
       }
-
     }
-
-    cv <- round(cc[1]*100, 0)
-    return(colorpallete[cv + 1])
+    return(col)
   }
 
   cbm <- function(d,fac) {
     if(is.leaf(d)) {
       lc <- fac[leafContent[[as.numeric(attr(d,'label'))]]]
-      cc <- c(sum(is.na(lc)),table(lc));
+      cc <- attr(d, "cc")
       col <- cc2col(cc)
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
-      attr(d,'cc') <- cc;
       return(d);
     } else {
       oa <- attributes(d);
       d <- lapply(d,cbm,fac=fac);
       attributes(d) <- oa;
-      cc <- attr(d[[1]],'cc')+attr(d[[2]],'cc')
+      cc <- attr(d, "cc")
       col <- cc2col(cc)
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
-      attr(d,'cc') <- cc;
       return(d);
     }
   }
   cbm(d,fac);
 }
 
-#' colored tree by species mixing based on normalized value
+#' colored tree by species mixing based on normalized value - 2-species only
+#' @param d dendrogram obj
+#' @param colorpallete vector contains colors
+#' @import RColorBrewer
 #' @export
-dendSetColorByNormMixing <- function(d, colorpallete){
+dendSetColor2factorNormMixing <- function(d, colorpallete){
   cc2col <- function(Normpercent, base=0.1){
     cv <- round(Normpercent*100, 0)
     return(colorpallete[cv + 1])
+  }
+
+  cbm <- function(d,fac) {
+    if(is.leaf(d)) {
+      normpercent <- attr(d, "normPercentage")
+      col <- cc2col(normpercent[1])
+      attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
+      return(d);
+    } else {
+      oa <- attributes(d);
+      d <- lapply(d,cbm);
+      attributes(d) <- oa;
+      normpercent <- attr(d, "normPercentage")
+      col <- cc2col(normpercent[1])
+      attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
+      return(d);
+    }
+  }
+  cbm(d,colorpallete);
+}
+
+#' colored tree by species mixing based on normalized value
+#' @export
+dendSetColorByNormMixing <- function(d){
+  cc2col <- function(cc, rate=15, base=0.001) {
+    if(length(cc)==2) { # 2-color
+      cv <- cc
+      cv <- dexp(c(cv[1], 0, cv[2]), rate) / base * (1-0.001)
+      #cv <- c(cc[1],0,cc[2])+base; cv <- cv/max(cv) * (1-base)
+      #rgb(base+cc[2],base,base+cc[3],1)
+      adjustcolor(rgb(cv[1], cv[2], cv[3], 1), offset = c(0.5, 0.5, 0.5, 0.1))
+    } else if(length(cc)==3) { # 3-color
+      #cv <- 1 - cc
+      cv <- cc
+      cv <- dexp(cv, rate)
+      #cv <- cv/max(cv) * (1-0.2)
+      cv <- cv/rate * (1-base)
+      adjustcolor(rgb(cv[1],cv[2],cv[3], 1), offset = c(0.5, 0.5, 0.5, 0.1))
+    }
   }
 
   cbm <- function(d,fac) {
@@ -588,42 +970,304 @@ dendSetColorByNormMixing <- function(d, colorpallete){
       return(d);
     }
   }
-  cbm(d,colorpallete);
+  cbm(d)
 }
 
-#' recursive prunning tree
+#' recursive prunning tree by minimal mixing
+#'
+#prunningTreebyminMixing <- function(d, minMixing=0.3){
+#  cbm <- function(d){
+#    if(is.leaf(d)){
+#      normpercentage <- attr(d, 'normPercentage')
+#      if(min(normpercentage) > minMixing){
+#        return(d);
+#      }
+#    } else {
+#      oa <- attributes(d);
+#      d <- lapply(d,cbm);
+#      if(is.null(d[[1]])){
+#        d <- d[[2]]
+#        oa <- attributes(d)
+#        attributes(d) <- oa
+#      } else if(is.null(d[[2]])){
+#        d <- d[[1]]
+#        oa <- attributes(d)
+#        attributes(d) <- oa
+#      } else{
+#        attributes(d) <- oa
+#      }
+#      return(d);
+#    }
+#  }
+#  cbm(d);
+#}
+
+#' build entire tree based on dendrogram and subsampled dendrograms
+#' @param dend dendrogram obj of original tree
+#' @param subsamples list contains subsampled dendrograms and correspondent cell clusters
+#' @param cls.groups clusters of original dendrograms
+#' @param cellannot  cell annotations
+#' @param species factor annoted which cell belong to which species
+#' @param upperlevelannot higher-level cell annotations
+#' @param plot plot the built tree or not
 #' @export
-prunningTree <- function(d, fac, leafContent, minSize=20){
-  cbm <- function(d,fac){
-    if(is.leaf(d)) {
-      label <- attr(d,'label')
-      if(length(grep(" ", label))>0){
-        # if tranfer leaf label before
-        label <- unlist(strsplit(label, " "))[1]
-      }
-      lc <- fac[leafContent[[as.numeric(label)]]]
-      cc <- length(lc)
-      if(cc > minSize){
-        return(d);
-      }
-    } else {
-      oa <- attributes(d);
-      d <- lapply(d,cbm,fac=fac);
-      if(is.null(d[[1]])){
-        d <- d[[2]]
-        oa <- attributes(d)
-        attributes(d) <- oa
-      } else if(is.null(d[[2]])){
-        d <- d[[1]]
-        oa <- attributes(d)
-        attributes(d) <- oa
-      } else{
-        attributes(d) <- oa
-      }
-      return(d);
+buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, species, upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE){
+  dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = cls.groups)
+  cls.groups <- dendr$new.groups
+
+  dend <- dendr$dendrogram
+  leafcontent <- dendr$leafcontent
+
+  if(!is.null(subsamples)){
+    stability.measurements <- TreeStabilityDend(dend, cls.groups, subsamples, n.cores=10)
+  } else{
+    stability.measurements = NULL
+  }
+
+
+  # add cluster attribute to dendrogram
+  dend <- AddTreeAttribute(dend, species, leafcontent)
+
+  dend <- dendSetWidthBysize(dend, scale=8)
+  leaflabels <- mappingLabel(dend, leafcontent, cellannot, humanAnnot=T)
+
+  # set labels
+  dend <- set_labels(dend, paste(dend %>% labels(), leaflabels, sep=" "))
+
+  # add upperlevel info to each nodes
+  if(!is.null(upperlevelannot[1])){
+    dend <- UpperLevelInfo(dend, cellannot=upperlevelannot, leafcontent, propCutoff = 0.1)
+    upperLevelnodes <- getUpperLevelNode(dend, cutoff=0.65)
+
+    # normalize Tree
+    dend <- NormTree(dend, upperLevelnodes, upperlevelannot, species)
+    dend <- dendSetColorByNormMixing(dend)
+  } else{
+    # need to modify
+    colorpallete <- colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)
+    dend <- dendSetColorByMixing(dend, species, leafContent, colorpallete)
+    upperLevelnodes = NULL
+    ##
+  }
+  if(plot){
+    if(!is.null(upperlevelannot) & !is.null(subsamples)){
+      par(cex=1, mar=c(20, 5, 0, 10))
+      plot(dend)
+      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
+      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
+           adj=c(0.4, 0.1), cex=0.35, col="red")
+    } else if(!is.null(upperlevelannot)){
+      par(cex=1, mar=c(20, 5, 0, 10))
+      plot(dend)
+      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
+    } else if(!is.null(subsamples)){
+      par(cex=1, mar=c(20, 5, 0, 10))
+      plot(dend)
+      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
+           adj=c(0.4, 0.1), cex=0.35, col="red")
+    }
+    else{
+      plot(dend)
     }
   }
-  cbm(d,fac);
+  return(list(dend=dend, stability=stability.measurements, upperLevelnodes=upperLevelnodes))
+}
+
+#' prune tree based on mixing
+#' @param dend dendrogram obj
+#' @param minCutoff minimal value for mixing cutoff
+#' @param maxCutoff max value for mixing cutoff
+#' @export
+pruneTree <- function(dend, minCutoff=0.3, maxCutoff=0.4){
+
+  is.branch.mixed <- function(dend, minCutoff=0.3, maxCutoff=0.4){
+    is.mixed <- FALSE
+    normPercentage <- attr(dend, "normPercentage")
+    if(normPercentage[1] > minCutoff & normPercentage[1] < maxCutoff){
+      is.mixed <- TRUE
+    }
+    return(is.mixed)
+  }
+
+  is.father.of.subtree.to.merge <- function(dend, minCutoff, maxCutoff) {
+    # this function checks if the subtree we wish to merge is the direct child of the current branch (dend) we entered the function
+    is.father <- FALSE
+    for (i in seq_len(length(dend)))
+    {
+      ### test
+      if(is.branch.mixed(dend[[i]], minCutoff, maxCutoff) == FALSE & !is.leaf(dend[[i]])) is.father <- TRUE
+    }
+    return(is.father)
+  }
+
+  search_mixed_subtree <- function(dend, minCutoff, maxCutoff){
+    if (!is.father.of.subtree.to.merge(dend, minCutoff=minCutoff, maxCutoff=maxCutoff)){
+      for (i in seq_len(length(dend))){
+        if(is.leaf(dend[[i]])){
+          next()
+        }
+        dend[[i]] <- search_mixed_subtree(dend[[i]], minCutoff, maxCutoff)
+      }
+    } else { # we'll merge
+      subtree_loc <- 1
+      if(!is.branch.mixed(dend[[subtree_loc]], minCutoff, maxCutoff)){
+        # achieve attributes
+        branch.attributes <- attributes(dend[[subtree_loc]])
+        # get all the leaf labels in this subtree
+        leaf.labels <- labels(dend[[subtree_loc]])
+        # prune subtree
+        if(length(leaf.labels) > 1){
+          dend <- prune(dend, leaf.labels[-1])
+          # assign attributes
+          attr(dend[[subtree_loc]], "cc") <- branch.attributes$cc
+          attr(dend[[subtree_loc]], "size") <- branch.attributes$size
+          attr(dend[[subtree_loc]], "edgePar") <- branch.attributes$edgePar
+          attr(dend[[subtree_loc]], "nodesinfo") <- branch.attributes$nodesinfo
+          attr(dend[[subtree_loc]], "percentage") <- branch.attributes$percentage
+          attr(dend[[subtree_loc]], "normPercentage") <- branch.attributes$normPercentage
+        }
+      }
+
+      if(!is.branch.mixed(dend[[subtree_loc+1]], minCutoff, maxCutoff)){
+        # achieve attributes
+        branch.attributes <- attributes(dend[[subtree_loc+1]])
+        # get all the leaf labels in this subtree
+        leaf.labels <- labels(dend[[subtree_loc+1]])
+        # prune subtree
+        if(length(leaf.labels) > 1){
+          dend <- prune(dend, leaf.labels[-1])
+          # assign attributes
+          attr(dend[[subtree_loc+1]], "cc") <- branch.attributes$cc
+          attr(dend[[subtree_loc+1]], "size") <- branch.attributes$size
+          attr(dend[[subtree_loc+1]], "edgePar") <- branch.attributes$edgePar
+          attr(dend[[subtree_loc+1]], "nodesinfo") <- branch.attributes$nodesinfo
+          attr(dend[[subtree_loc+1]], "percentage") <- branch.attributes$percentage
+          attr(dend[[subtree_loc+1]], "normPercentage") <- branch.attributes$normPercentage
+        }
+      }
+    }
+    return(dend)
+  }
+
+  prune_mixed_subtree <- function(dend, minCutoff, maxCutoff){
+    dend.label <- labels(dend)
+    dend <- search_mixed_subtree(dend, minCutoff, maxCutoff)
+    label.updated <- labels(dend)
+
+    if(length(dend.label)==length(label.updated)){
+      return(dend)
+    } else{
+      #dend.label <- label.updated
+      dend <- prune_mixed_subtree(dend, minCutoff, maxCutoff)
+      #label.updated <- labels(dend)
+    }
+  }
+
+  new_dend <- prune_mixed_subtree(dend, minCutoff, maxCutoff)
+  # re-assign space
+  new_dend <- ladderize(new_dend, right=FALSE)
+  new_dend <- ladderize(fix_members_attr.dendrogram(new_dend), right=FALSE)
+  return(new_dend)
+}
+
+#' prune tree based on entropy
+#' @param dend dendrogram obj
+#' @param cutoff cutoff value
+#' @export
+pruneTreeEntropy <- function(dend, cutoff=2.9){
+
+  is.branch.mixed <- function(dend, cutoff){
+    is.mixed <- FALSE
+    entropy <- attr(dend, "entropy")
+    if(entropy > cutoff){
+      is.mixed <- TRUE
+    }
+    return(is.mixed)
+  }
+
+  is.father.of.subtree.to.merge <- function(dend, cutoff) {
+    # this function checks if the subtree we wish to merge is the direct child of the current branch (dend) we entered the function
+    is.father <- FALSE
+    for (i in seq_len(length(dend)))
+    {
+      ### test
+      if(is.branch.mixed(dend[[i]], cutoff) == FALSE & !is.leaf(dend[[i]])) is.father <- TRUE
+    }
+    return(is.father)
+  }
+
+  search_mixed_subtree <- function(dend, cutoff){
+    if (!is.father.of.subtree.to.merge(dend, cutoff)){
+      for (i in seq_len(length(dend))){
+        if(is.leaf(dend[[i]])){
+          next()
+        }
+        dend[[i]] <- search_mixed_subtree(dend[[i]], cutoff)
+      }
+    } else { # we'll merge
+      subtree_loc <- 1
+      if(!is.branch.mixed(dend[[subtree_loc]], cutoff)){
+        # achieve attributes
+        branch.attributes <- attributes(dend[[subtree_loc]])
+        # get all the leaf labels in this subtree
+        leaf.labels <- labels(dend[[subtree_loc]])
+        # prune subtree
+        if(length(leaf.labels) > 1){
+          dend <- prune(dend, leaf.labels[-1])
+          # assign attributes
+          attr(dend[[subtree_loc]], "cc") <- branch.attributes$cc
+          attr(dend[[subtree_loc]], "size") <- branch.attributes$size
+          attr(dend[[subtree_loc]], "edgePar") <- branch.attributes$edgePar
+          attr(dend[[subtree_loc]], "nodesinfo") <- branch.attributes$nodesinfo
+          attr(dend[[subtree_loc]], "percentage") <- branch.attributes$percentage
+          attr(dend[[subtree_loc]], "normPercentage") <- branch.attributes$normPercentage
+          attr(dend[[subtree_loc]], "stability") <- branch.attributes$stability
+          attr(dend[[subtree_loc]], "entropy") <- branch.attributes$entropy
+        }
+      }
+
+      if(!is.branch.mixed(dend[[subtree_loc+1]], cutoff)){
+        # achieve attributes
+        branch.attributes <- attributes(dend[[subtree_loc+1]])
+        # get all the leaf labels in this subtree
+        leaf.labels <- labels(dend[[subtree_loc+1]])
+        # prune subtree
+        if(length(leaf.labels) > 1){
+          dend <- prune(dend, leaf.labels[-1])
+          # assign attributes
+          attr(dend[[subtree_loc+1]], "cc") <- branch.attributes$cc
+          attr(dend[[subtree_loc+1]], "size") <- branch.attributes$size
+          attr(dend[[subtree_loc+1]], "edgePar") <- branch.attributes$edgePar
+          attr(dend[[subtree_loc+1]], "nodesinfo") <- branch.attributes$nodesinfo
+          attr(dend[[subtree_loc+1]], "percentage") <- branch.attributes$percentage
+          attr(dend[[subtree_loc+1]], "normPercentage") <- branch.attributes$normPercentage
+          attr(dend[[subtree_loc+1]], "stability") <- branch.attributes$stability
+          attr(dend[[subtree_loc+1]], "entropy") <- branch.attributes$entropy
+        }
+      }
+    }
+    return(dend)
+  }
+
+  prune_mixed_subtree <- function(dend, cutoff){
+    dend.label <- labels(dend)
+    dend <- search_mixed_subtree(dend, cutoff)
+    label.updated <- labels(dend)
+
+    if(length(dend.label)==length(label.updated)){
+      return(dend)
+    } else{
+      #dend.label <- label.updated
+      dend <- prune_mixed_subtree(dend, cutoff)
+      #label.updated <- labels(dend)
+    }
+  }
+
+  new_dend <- prune_mixed_subtree(dend, cutoff)
+  # re-assign space
+  new_dend <- ladderize(new_dend, right=FALSE)
+  new_dend <- ladderize(fix_members_attr.dendrogram(new_dend), right=FALSE)
+  return(new_dend)
 }
 
 #' cross-species mapping summary: 1:1, or many:many
@@ -646,94 +1290,5 @@ clusterMappingSummary <- function(leafannot, prefix="bi", speciesNames=c("marmo"
   })
   MappingStat <- do.call(rbind, MappingStat)
   return(MappingStat)
-}
-
-#' Run recursive leiden clustering algorithm - modified from conos (https://github.com/hms-dbmi/conos)
-#'
-#' @param graph igraph object
-#' @export
-
-rleiden.detection <- function(graph, K=2, renameCluter=TRUE, n.cores=parallel::detectCores(logical=F),
-                              min.community.size=10, verbose=FALSE, resolution=1, K.current=1, hierarchical=FALSE, ...){
-
-  if(verbose & K.current==1) cat(paste0("running ",K,"-recursive Leiden clustering: "));
-  if(length(resolution)>1) {
-    if(length(resolution)!=K) { stop("resolution value must be either a single number or a vector of length K")}
-    res <- resolution[K.current]
-  } else { res <- resolution }
-  mt <- leiden.community(graph, resolution=res, ...);
-
-  mem <- membership(mt);
-  tx <- table(mem)
-  ivn <- names(tx)[tx<min.community.size]
-  if(length(ivn)>1) {
-    mem[mem %in% ivn] <- as.integer(ivn[1]); # collapse into one group
-  }
-  if(verbose) cat(length(unique(mem)),' ');
-
-  if(K.current<K) {
-    # start recursive run
-    if(n.cores>1) {
-      wtl <- mclapply(conos:::sn(unique(mem)), function(cluster) {
-        cn <- names(mem)[which(mem==cluster)]
-        sg <- induced.subgraph(graph,cn)
-        rleiden.detection(induced.subgraph(graph,cn), K=K, resolution=resolution, K.current=K.current+1,
-                          min.community.size=min.community.size, hierarchical=hierarchical, verbose=verbose, n.cores=n.cores)
-      },mc.cores=n.cores,mc.allow.recursive = FALSE)
-    } else {
-      wtl <- lapply(conos:::sn(unique(mem)), function(cluster) {
-        cn <- names(mem)[which(mem==cluster)]
-        sg <- induced.subgraph(graph,cn)
-        rleiden.detection(induced.subgraph(graph,cn), K=K, resolution=resolution, K.current=K.current+1,
-                          min.community.size=min.community.size, hierarchical=hierarchical, verbose=verbose, n.cores=n.cores)
-      })
-    }
-    # merge clusters, cleanup
-    mbl <- lapply(wtl,membership);
-    # combined clustering factor
-    fv <- unlist(lapply(names(wtl),function(cn) {
-      paste(cn,as.character(mbl[[cn]]),sep='-')
-    }))
-    names(fv) <- unlist(lapply(mbl,names))
-  } else {
-    fv <- mem;
-    if(hierarchical) {
-      # use walktrap on the last level
-      wtl <- conos:::papply(conos:::sn(unique(mem)), function(cluster) {
-        cn <- names(mem)[which(mem==cluster)]
-        sg <- induced.subgraph(graph,cn)
-        res <- walktrap.community(induced.subgraph(graph,cn))
-        res$merges <- igraph:::complete.dend(res,FALSE)
-        res
-      },n.cores=n.cores)
-    }
-  }
-
-  if(K.current==1) {
-    if(verbose) {
-      cat(paste0(' detected a total of ',length(unique(fv)),' clusters '));
-      cat("done\n");
-    }
-    # rename clusters
-    if(renameCluter){
-      tmp <- fv
-      label.table <- data.frame(old=as.character(unique(fv)), new=as.character(seq(1, length(unique(fv)), 1)),
-                                stringsAsFactors = FALSE)
-
-      # reassign label to groups
-      fv.new <- as.character(fv)
-
-      fv.new <- as.character(match(fv.new, label.table$old))
-      fv <- fv.new
-      names(fv) <- names(tmp)
-    }
-
-  }
-
-  # enclose in a masquerading class
-  combd <- NULL
-  res <- list(membership=fv,dendrogram=combd,algorithm='rleiden');
-  class(res) <- rev("fakeCommunities")
-  return(res)
 }
 

@@ -4,7 +4,7 @@
 \alias{getUpperLevelNode}
 \title{get highest node with upperlevel information}
 \usage{
-getUpperLevelNode(d, cutoff = 0.7)
+getUpperLevelNode(dend, cutoff = 0.7)
 }
 \description{
 get highest node with upperlevel information
