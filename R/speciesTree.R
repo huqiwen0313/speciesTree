@@ -56,28 +56,6 @@ bestClusterTreeThresholds <- function (res, leaf.factor, clusters, clmerges = NU
   x
 }
 
-## testing
-bestClusterThresholds <- function (res, leaf.factor, clusters, clmerges = NULL) {
-  clusters <- as.factor(clusters)
-  #cl <- as.integer(clusters[res$names])
-  cl <- as.integer(as.character(clusters[names(leaf.factor)]))
-  clT <- tabulate(cl, nbins = length(levels(clusters)))
-  #res$merges <- igraph:::complete.dend(res, FALSE)
-  if(class(res) != "list"){
-    merges <- igraph:::complete.dend(res, FALSE)
-  }
-
-  if (is.null(clmerges)) {
-    x <- conos:::treeJaccard(res$merges - 1L, matrix(cl - 1L, nrow = 1), clT)
-    names(x$threshold) <- levels(clusters)
-  }
-  else {
-    x <- conos:::treeJaccard(res$merges - 1L, matrix(cl -1L, nrow = 1), clT, clmerges - 1L)
-  }
-  x
-}
-
-
 #' mapping leaf node according to cell annotation
 #' @param d dendrogram
 #' @param cellannot factor contains celltype annotation for each cell
@@ -430,7 +408,7 @@ TreeStability <- function(dataobj, dend, algorithm="expression", cls.groups, cls
 #' @param subsamples list contains subsampled dendrograms and correspondent cell clusters
 #' @import dendextend
 #' @export
-TreeStabilityDend <- function(dend, cls.groups, subsamples, n.cores=5){
+TreeStabilityDend <- function(dend, cls.groups, subsamples, assignValuestoNode=TRUE, n.cores=5){
 
   cls.groups <- as.factor(cls.groups)
   cls.levs <- levels(cls.groups)
@@ -494,9 +472,10 @@ TreeStabilityDend <- function(dend, cls.groups, subsamples, n.cores=5){
   to <- t.dfirst(hc$merge)
   x <- apply(jc.hstats, 2, median)
 
-  # set stability attr to dendrogram
-  #require(dendextend)
-  #set(dend, "stability") <- round(x[to], 2)
+  # assign stability attribute to dendrogram
+  if(assignValuestoNode){
+    dend <- assign_values_to_nodes(dend, "stability", round(x[to], 2))
+  }
   return(list(dendrogram=dend, stability.loc=xy, stability.labels=round(x[to], 2)))
 }
 
@@ -741,6 +720,54 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
       }
       return(d)
     }
+  }
+  cbm(d, cellannot)
+}
+
+#' Normalize tree based on within-factors
+#' @param dend dendrogram obj
+#' @param fac factor contain all cells and their correspondent annotation
+#' @export
+NormTreeWithinFactor <- function(dend, fac){
+  celltable <- table(fac)
+  cbm <- function(d, cellannot){
+    if(is.leaf(d)){
+      # mapping cell to within-factor annotation table
+      nodeinfo <- attr(d, "nodesinfo")
+      nodeAnnot <- fac[names(fac) %in% nodeinfo]
+      # get node cluster count distribution
+      nodedistr <- table(nodeAnnot)
+      # mapping node cells into total cell distr
+      mappedAnnot <- celltable[match(names(nodedistr), names(celltable))]
+      normalizedFac <- nodedistr/mappedAnnot
+      facprefix <- gsub(" .*", "", names(normalizedFac))
+      withinFacCount <- unlist(lapply(unique(facprefix), function(f){
+        round(sum(normalizedFac[which(facprefix==f)]), 2)
+      }))
+      names(withinFacCount) <- unique(facprefix)
+      attr(d, "withinFacCount") <- withinFacCount
+      attr(d, "withinFacPercent") <- round(withinFacCount/sum(withinFacCount), 2)
+      return(d)
+    } else {
+      oa <- attributes(d)
+      d <- lapply(d, cbm, cellannot=cellannot);
+      attributes(d) <- oa
+      nodeinfo <- attr(d, "nodesinfo")
+      nodeAnnot <- fac[names(fac) %in% nodeinfo]
+      # get node cluster count distribution
+      nodedistr <- table(nodeAnnot)
+      # mapping node cells into total cell distr
+      mappedAnnot <- celltable[match(names(nodedistr), names(celltable))]
+      normalizedFac <- nodedistr/mappedAnnot
+      facprefix <- gsub(" .*", "", names(normalizedFac))
+      withinFacCount <- unlist(lapply(unique(facprefix), function(f){
+        round(sum(normalizedFac[which(facprefix==f)]), 2)
+      }))
+      names(withinFacCount) <- unique(facprefix)
+      attr(d, "withinFacCount") <- withinFacCount
+      attr(d, "withinFacPercent") <- round(withinFacCount/sum(withinFacCount), 2)
+    }
+    return(d)
   }
   cbm(d, cellannot)
 }
