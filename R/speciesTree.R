@@ -33,7 +33,10 @@ transferLeaflabel <- function(leafcontent, cellannot){
 }
 
 #' caculate jacard coefficiency from best maching tree
-#' @param res either subsampled hierarchical graphs or a list contains merge matrix that have the similar format as igraph:::complete.dend
+#' @param res either subsampled hierarchical graphs or a list contains 
+#'             merge matrix that have the similar format as igraph:::complete.dend
+#' @param leaf.factor factor contain cell id and leaf clusters
+#' @param clusters    original clusters
 bestClusterTreeThresholds <- function (res, leaf.factor, clusters, clmerges = NULL){
   clusters <- as.factor(clusters)
   #cl <- as.integer(as.character(clusters[names(leaf.factor)]))
@@ -728,9 +731,9 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
 #' @param dend dendrogram obj
 #' @param fac factor contain all cells and their correspondent annotation
 #' @export
-NormTreeWithinFactor <- function(dend, fac){
+NormTreeWithinFactor <- function(d, fac, facprefix=c("human", "marmoset", "mouse")){
   celltable <- table(fac)
-  cbm <- function(d, cellannot){
+  cbm <- function(d){
     if(is.leaf(d)){
       # mapping cell to within-factor annotation table
       nodeinfo <- attr(d, "nodesinfo")
@@ -740,17 +743,21 @@ NormTreeWithinFactor <- function(dend, fac){
       # mapping node cells into total cell distr
       mappedAnnot <- celltable[match(names(nodedistr), names(celltable))]
       normalizedFac <- nodedistr/mappedAnnot
-      facprefix <- gsub(" .*", "", names(normalizedFac))
-      withinFacCount <- unlist(lapply(unique(facprefix), function(f){
-        round(sum(normalizedFac[which(facprefix==f)]), 2)
+      prefix <- gsub(" .*", "", names(normalizedFac))
+      withinFacCount <- unlist(lapply(facprefix, function(f){
+        if(length(which(prefix == f)) == 0){
+          return(0)
+        } else{
+          return(sum(normalizedFac[which(prefix==f)]))
+        }
       }))
-      names(withinFacCount) <- unique(facprefix)
+      names(withinFacCount) <- facprefix
       attr(d, "withinFacCount") <- withinFacCount
       attr(d, "withinFacPercent") <- round(withinFacCount/sum(withinFacCount), 2)
       return(d)
-    } else {
+    } else{
       oa <- attributes(d)
-      d <- lapply(d, cbm, cellannot=cellannot);
+      d <- lapply(d, cbm);
       attributes(d) <- oa
       nodeinfo <- attr(d, "nodesinfo")
       nodeAnnot <- fac[names(fac) %in% nodeinfo]
@@ -759,17 +766,21 @@ NormTreeWithinFactor <- function(dend, fac){
       # mapping node cells into total cell distr
       mappedAnnot <- celltable[match(names(nodedistr), names(celltable))]
       normalizedFac <- nodedistr/mappedAnnot
-      facprefix <- gsub(" .*", "", names(normalizedFac))
-      withinFacCount <- unlist(lapply(unique(facprefix), function(f){
-        round(sum(normalizedFac[which(facprefix==f)]), 2)
+      prefix <- gsub(" .*", "", names(normalizedFac))
+      withinFacCount <- unlist(lapply(facprefix, function(f){
+        if(length(which(prefix == f)) == 0){
+          return(0)
+        } else{
+          return(sum(normalizedFac[which(prefix==f)]))
+        }
       }))
-      names(withinFacCount) <- unique(facprefix)
+      names(withinFacCount) <- facprefix
       attr(d, "withinFacCount") <- withinFacCount
       attr(d, "withinFacPercent") <- round(withinFacCount/sum(withinFacCount), 2)
     }
     return(d)
   }
-  cbm(d, cellannot)
+  cbm(d)
 }
 
 #' caculate branch entropy attribute for normalized value
@@ -777,10 +788,15 @@ NormTreeWithinFactor <- function(dend, fac){
 #' @return add entropy attributes into the dendrogram
 #' @import entropy
 #' @export
-TreeEntropy <- function(d, entropy.cutoff=2.0){
+TreeEntropy <- function(d, entropy.cutoff=2.0, withnFacNorm=FALSE){
   cbm <- function(d){
-    if(is.leaf(d)) {
-      normpercentage <- attr(d, 'normPercentage')
+    if(is.leaf(d)){
+      if(withnFacNorm){
+        normpercentage <- attr(d, "withinFacPercent")
+      } else{
+        normpercentage <- attr(d, 'normPercentage')
+      }
+
       if(is.null(normpercentage)){
         stop("please normalize tree first..........")
       }
@@ -795,7 +811,12 @@ TreeEntropy <- function(d, entropy.cutoff=2.0){
       oa <- attributes(d)
       d <- lapply(d, cbm)
       attributes(d) <- oa
-      normpercentage <- attr(d, 'normPercentage')
+      if(withnFacNorm){
+        normpercentage <- attr(d, "withinFacPercent")
+      } else{
+        normpercentage <- attr(d, 'normPercentage')
+      }
+
       normentropy <- entropy::entropy(normpercentage, method='MM', unit='log2')
       attr(d, "entropy") <- normentropy
       if(normentropy > entropy.cutoff){
@@ -813,7 +834,7 @@ TreeEntropy <- function(d, entropy.cutoff=2.0){
 #' @return add entropy attributes into the dendrogram
 #' @import entropy
 #' @export
-MarkMixedNode <- function(d, mixing.cutoff=0.3){
+MarkMixedNode <- function(d, mixing.cutoff=0.3, max.cutoff=0.6){
   cbm <- function(d){
     if(is.leaf(d)) {
       normpercentage <- attr(d, 'normPercentage')
@@ -821,7 +842,7 @@ MarkMixedNode <- function(d, mixing.cutoff=0.3){
         stop("please normalize tree first..........")
       }
 
-      if(normpercentage[1]>mixing.cutoff & normpercentage[1]<0.4){
+      if(normpercentage[1]>mixing.cutoff & normpercentage[1]<max.cutoff & !is.na(normpercentage[1])){
         attr(d, "nodePar")$pch <- 19
         attr(d, "nodePar")$col <- "blue"
       }
@@ -831,7 +852,7 @@ MarkMixedNode <- function(d, mixing.cutoff=0.3){
       d <- lapply(d, cbm)
       attributes(d) <- oa
       normpercentage <- attr(d, 'normPercentage')
-      if(normpercentage[1]>mixing.cutoff & normpercentage[1]<0.4){
+      if(normpercentage[1]>mixing.cutoff & normpercentage[1]<max.cutoff & !is.na(normpercentage[1])){
         attr(d, "nodePar")$pch <- 19
         attr(d, "nodePar")$col <- "blue"
       }
@@ -898,7 +919,7 @@ dendSetColorByMixing <- function(d, fac, leafContent, normTofac=TRUE){
 
       } else{
         if(normTofac){
-          cc <- round((cc[2:4]/totalCells)/sum(cc[2:4])/totalCells, 2)
+          cc <- round((cc[2:4]/totalCells)/sum(cc[2:4]/totalCells), 2)
         } else{
           cc <- round((cc[2:4])/sum(cc[2:4]), 2)
         }
@@ -913,7 +934,7 @@ dendSetColorByMixing <- function(d, fac, leafContent, normTofac=TRUE){
 
   cbm <- function(d,fac) {
     if(is.leaf(d)) {
-      lc <- fac[leafContent[[as.numeric(attr(d,'label'))]]]
+      #lc <- fac[leafContent[[as.numeric(attr(d,'label'))]]]
       cc <- attr(d, "cc")
       col <- cc2col(cc)
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
@@ -934,17 +955,33 @@ dendSetColorByMixing <- function(d, fac, leafContent, normTofac=TRUE){
 #' colored tree by species mixing based on normalized value - 2-species only
 #' @param d dendrogram obj
 #' @param colorpallete vector contains colors
+#' @param facPrefix factor prefix selected to color - e.g. c("human", "mouse")
+#' @param reNormalize re-caculate mixing
+#' @param addValueToNode add re-caculated value to node
 #' @import RColorBrewer
 #' @export
-dendSetColor2factorNormMixing <- function(d, colorpallete){
+dendSetColor2factorNormMixing <- function(d, reNormalize=TRUE, facPrefix, addValueToNode=TRUE, colorpallete){
   cc2col <- function(Normpercent, base=0.1){
     cv <- round(Normpercent*100, 0)
     return(colorpallete[cv + 1])
   }
 
-  cbm <- function(d,fac) {
+  cbm <- function(d) {
     if(is.leaf(d)) {
-      normpercent <- attr(d, "normPercentage")
+      if(reNormalize){
+        normfac <- attr(d, "normFac")
+        if(is.null(normfac)){
+          stop("please normalize the tree first......")
+        } else{
+          normfac <- normfac[match(facPrefix, names(normfac))]
+          normpercent <- normfac/sum(normfac)
+          if(addValueToNode){
+            attr(d, "normPercentage") <- normpercent
+          }
+        }
+      } else{
+        normpercent <- attr(d, "normPercentage")
+      }
       col <- cc2col(normpercent[1])
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
       return(d);
@@ -952,18 +989,34 @@ dendSetColor2factorNormMixing <- function(d, colorpallete){
       oa <- attributes(d);
       d <- lapply(d,cbm);
       attributes(d) <- oa;
-      normpercent <- attr(d, "normPercentage")
+      if(reNormalize){
+        normfac <- attr(d, "normFac")
+        if(is.null(normfac)){
+          stop("please normalize the tree first......")
+        } else{
+          normfac <- normfac[match(facPrefix, names(normfac))]
+          normpercent <- normfac/sum(normfac)
+          if(addValueToNode){
+            attr(d, "normPercentage") <- normpercent
+          }
+        }
+      } else{
+        normpercent <- attr(d, "normPercentage")
+      }
       col <- cc2col(normpercent[1])
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
       return(d);
     }
   }
-  cbm(d,colorpallete);
+  cbm(d);
 }
 
 #' colored tree by species mixing based on normalized value
+#' @param d dendrogram
+#' @param withinFacNorm if colored the tree based on wihinfactor normalization
+#' @return colored dendrogram
 #' @export
-dendSetColorByNormMixing <- function(d){
+dendSetColorByNormMixing <- function(d, withinFacNorm=FALSE){
   cc2col <- function(cc, rate=15, base=0.001) {
     if(length(cc)==2) { # 2-color
       cv <- cc
@@ -981,9 +1034,14 @@ dendSetColorByNormMixing <- function(d){
     }
   }
 
-  cbm <- function(d,fac) {
+  cbm <- function(d,fac){
     if(is.leaf(d)) {
-      normpercent <- attr(d, "normPercentage")
+      if(withinFacNorm){
+        normpercent <- attr(d, "withinFacPercent")
+      } else{
+        normpercent <- attr(d, "normPercentage")
+      }
+
       col <- cc2col(normpercent)
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
       return(d);
@@ -991,7 +1049,12 @@ dendSetColorByNormMixing <- function(d){
       oa <- attributes(d);
       d <- lapply(d,cbm);
       attributes(d) <- oa;
-      normpercent <- attr(d, "normPercentage")
+      if(withinFacNorm){
+        normpercent <- attr(d, "withinFacPercent")
+      } else{
+        normpercent <- attr(d, "normPercentage")
+      }
+
       col <- cc2col(normpercent)
       attr(d,"edgePar") <- c(attr(d,"edgePar"),list(col=col))
       return(d);
@@ -999,35 +1062,6 @@ dendSetColorByNormMixing <- function(d){
   }
   cbm(d)
 }
-
-#' recursive prunning tree by minimal mixing
-#'
-#prunningTreebyminMixing <- function(d, minMixing=0.3){
-#  cbm <- function(d){
-#    if(is.leaf(d)){
-#      normpercentage <- attr(d, 'normPercentage')
-#      if(min(normpercentage) > minMixing){
-#        return(d);
-#      }
-#    } else {
-#      oa <- attributes(d);
-#      d <- lapply(d,cbm);
-#      if(is.null(d[[1]])){
-#        d <- d[[2]]
-#        oa <- attributes(d)
-#        attributes(d) <- oa
-#      } else if(is.null(d[[2]])){
-#        d <- d[[1]]
-#        oa <- attributes(d)
-#        attributes(d) <- oa
-#      } else{
-#        attributes(d) <- oa
-#      }
-#      return(d);
-#    }
-#  }
-#  cbm(d);
-#}
 
 #' build entire tree based on dendrogram and subsampled dendrograms
 #' @param dend dendrogram obj of original tree
@@ -1050,7 +1084,6 @@ buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, speci
   } else{
     stability.measurements = NULL
   }
-
 
   # add cluster attribute to dendrogram
   dend <- AddTreeAttribute(dend, species, leafcontent)
@@ -1110,7 +1143,7 @@ pruneTree <- function(dend, minCutoff=0.3, maxCutoff=0.4){
   is.branch.mixed <- function(dend, minCutoff=0.3, maxCutoff=0.4){
     is.mixed <- FALSE
     normPercentage <- attr(dend, "normPercentage")
-    if(normPercentage[1] > minCutoff & normPercentage[1] < maxCutoff){
+    if(normPercentage[1] > minCutoff & normPercentage[1] < maxCutoff & !is.na(normPercentage[1])){
       is.mixed <- TRUE
     }
     return(is.mixed)
