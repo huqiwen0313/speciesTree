@@ -4,7 +4,7 @@
 \alias{TreeEntropy}
 \title{caculate branch entropy attribute for normalized value}
 \usage{
-TreeEntropy(d, entropy.cutoff = 2)
+TreeEntropy(d, entropy.cutoff = 2, withnFacNorm = FALSE)
 }
 \arguments{
 \item{d}{dendrogram}

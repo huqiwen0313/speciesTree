@@ -7,7 +7,12 @@
 bestClusterTreeThresholds(res, leaf.factor, clusters, clmerges = NULL)
 }
 \arguments{
-\item{res}{either subsampled hierarchical graphs or a list contains merge matrix that have the similar format as igraph:::complete.dend}
+\item{res}{either subsampled hierarchical graphs or a list contains 
+merge matrix that have the similar format as igraph:::complete.dend}
+
+\item{leaf.factor}{factor contain cell id and leaf clusters}
+
+\item{clusters}{original clusters}
 }
 \description{
 caculate jacard coefficiency from best maching tree

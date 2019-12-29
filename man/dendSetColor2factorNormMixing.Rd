@@ -4,10 +4,22 @@
 \alias{dendSetColor2factorNormMixing}
 \title{colored tree by species mixing based on normalized value - 2-species only}
 \usage{
-dendSetColor2factorNormMixing(d, colorpallete)
+dendSetColor2factorNormMixing(
+  d,
+  reNormalize = TRUE,
+  facPrefix,
+  addValueToNode = TRUE,
+  colorpallete
+)
 }
 \arguments{
 \item{d}{dendrogram obj}
+
+\item{reNormalize}{re-caculate mixing}
+
+\item{facPrefix}{factor prefix selected to color - e.g. c("human", "mouse")}
+
+\item{addValueToNode}{add re-caculated value to node}
 
 \item{colorpallete}{vector contains colors}
 }

@@ -4,7 +4,7 @@
 \alias{MarkMixedNode}
 \title{caculate branch entropy attribute for normalized value}
 \usage{
-MarkMixedNode(d, mixing.cutoff = 0.3)
+MarkMixedNode(d, mixing.cutoff = 0.3, max.cutoff = 0.6)
 }
 \arguments{
 \item{d}{dendrogram}

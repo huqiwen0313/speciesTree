@@ -4,7 +4,15 @@
 \alias{dendSetColorByNormMixing}
 \title{colored tree by species mixing based on normalized value}
 \usage{
-dendSetColorByNormMixing(d)
+dendSetColorByNormMixing(d, withinFacNorm = FALSE)
+}
+\arguments{
+\item{d}{dendrogram}
+
+\item{withinFacNorm}{if colored the tree based on wihinfactor normalization}
+}
+\value{
+colored dendrogram
 }
 \description{
 colored tree by species mixing based on normalized value

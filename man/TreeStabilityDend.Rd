@@ -4,7 +4,13 @@
 \alias{TreeStabilityDend}
 \title{caculate stability only based on dendrogram and subsampled dendrograms}
 \usage{
-TreeStabilityDend(dend, cls.groups, subsamples, n.cores = 5)
+TreeStabilityDend(
+  dend,
+  cls.groups,
+  subsamples,
+  assignValuestoNode = TRUE,
+  n.cores = 5
+)
 }
 \arguments{
 \item{dend}{original dendrogram}

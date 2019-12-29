@@ -2,7 +2,7 @@
 % Please edit documentation in R/speciesTree.R
 \name{buildSpeciesTree}
 \alias{buildSpeciesTree}
-\title{recursive prunning tree by minimal mixing}
+\title{build entire tree based on dendrogram and subsampled dendrograms}
 \usage{
 buildSpeciesTree(
   dend,
