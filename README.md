@@ -2,9 +2,9 @@
 Tree based method for cross-species integration
 
 SpeciesTree is a package designed for cross-species data analysis to identify homologous groups and evolutional patterns.
-The algorithm is used in BICCN cross species analysis to identify robust homologous groups in human, mouse and marmoset.
+The approach is used in [BICCN](https://biccn.org/) cross species analysis to identify robust homologous groups in human, mouse and marmoset.
 
-## Approach
+## Pipeline
 ![overview](https://github.com/huqiwen0313/speciesTree/blob/master/figs/pipeline.overview.png)
 
 ## Installation
