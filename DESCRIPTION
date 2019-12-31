@@ -2,9 +2,8 @@ Package: speciesTree
 Type: Package
 Title: Tree based method for cross-species integration
 Version: 0.1.0
-Author: c(person("Peter", "Kharchenko", email = "peter_kharchenko@hms.harvard.edu", role = "aut"),
-             person("Qiwen","Hu", email="huqiwen0313@gmail.com", role="aut"))
-Maintainer: 
+Authors@R: c(person("Qiwen", "Hu", email = "huqiwen0313@gmail.com", role = c("aut", "cre")),
+             person("Peter", "Kharchenko", email="peter_kharchenko@hms.harvard.edu", role="aut"))
 Description: Tree based method for identifying robust homologous groups.
 License: GPL3
 Encoding: UTF-8
