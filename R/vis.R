@@ -1,6 +1,7 @@
 # visulization functions
 
 #' visulize stability measurements of leaf nodes
+#' @param stability.measure data frame contains stability measurement
 #' @export
 plotStability <- function(stability.measure){
 

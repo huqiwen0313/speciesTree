@@ -33,10 +33,9 @@ transferLeaflabel <- function(leafcontent, cellannot){
 }
 
 #' caculate jacard coefficiency from best maching tree
-#' @param res either subsampled hierarchical graphs or a list contains 
-#'             merge matrix that have the similar format as igraph:::complete.dend
-#' @param leaf.factor factor contain cell id and leaf clusters
-#' @param clusters    original clusters
+#' @param res either subsampled hierarchical graphs or a list contains merge matrix that have the similar format as igraph:::complete.dend
+#' @param leaf.factor: leaf factor showing the assignment of cell ID in leaf nodes
+#' @param clusters: cluster factor
 bestClusterTreeThresholds <- function (res, leaf.factor, clusters, clmerges = NULL){
   clusters <- as.factor(clusters)
   #cl <- as.integer(as.character(clusters[names(leaf.factor)]))
@@ -146,7 +145,6 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=T){
 #' @param attribute attribute name
 #' @param value vector contains attribute values
 #' @return dendrogram obj with new attributes added to each node
-#' @export
 assign_values_to_nodes <- function(dend, attribute, value){
   if (!is.dendrogram(dend)) stop("'dend' should be a dendrogram.")
 
@@ -223,7 +221,7 @@ TransferDend <- function(dend, renameCluster=TRUE, cls.groups){
 #' @param stability.subsample # of subsampling
 #' @param method clustering algorithm (e.g. walktrap, leiden etc)
 #' @param saveGraph if save the susample result
-#'
+#' @return original and subsampled graphs
 #' @export
 subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=10,
                              stability.subsampling.fraction=0.95, saveGraph=T, prefix=NULL){
@@ -578,12 +576,11 @@ UpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
 }
 
 #' Get all upperlevel annotations concanated with "+"
+#' @param d: dendrogram object
+#' @param cellannot: factor contains upperlevel annotation for each cell
+#' @param leafContent: leafcontent structure for each cluster
 #' @export
 AllUpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
-  # Add all upper-level annotations in each branch concated with "+"
-  # d: dendrogram
-  # cellannot: factor contains upperlevel annotation for each cell
-  # leafContent: leafcontent structure for each cluster
 
   cbm <- function(d, cellannot){
     if(is.leaf(d)) {
@@ -617,6 +614,8 @@ AllUpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
 }
 
 #' get highest node with upperlevel information
+#' @param dend dendrogram obj
+#' @param cutoff purity cutoff
 #' @export
 getUpperLevelNode <- function(dend, cutoff=0.7){
   # d: dendrogram with upperlevel and percentage features
@@ -730,6 +729,7 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
 #' Normalize tree based on within-factors
 #' @param dend dendrogram obj
 #' @param fac factor contain all cells and their correspondent annotation
+#' @return dendrogram with normalized values
 #' @export
 NormTreeWithinFactor <- function(d, fac, facprefix=c("human", "marmoset", "mouse")){
   celltable <- table(fac)
@@ -829,9 +829,9 @@ TreeEntropy <- function(d, entropy.cutoff=2.0, withnFacNorm=FALSE){
   cbm(d)
 }
 
-#' caculate branch entropy attribute for normalized value
+#' Mark nodes that mix well
 #' @param d dendrogram
-#' @return add entropy attributes into the dendrogram
+#' @return dendragram marked with nodes that have good mixing between factors
 #' @import entropy
 #' @export
 MarkMixedNode <- function(d, mixing.cutoff=0.3, max.cutoff=0.6){
@@ -855,6 +855,95 @@ MarkMixedNode <- function(d, mixing.cutoff=0.3, max.cutoff=0.6){
       if(normpercentage[1]>mixing.cutoff & normpercentage[1]<max.cutoff & !is.na(normpercentage[1])){
         attr(d, "nodePar")$pch <- 19
         attr(d, "nodePar")$col <- "blue"
+      }
+      return(d)
+    }
+  }
+  cbm(d)
+}
+
+#' get mixed nodes by pairwise factor comparison
+#' @param d: dendrogram ojb
+#' @param mixing.cutoff: minimal cutoff value
+#' @param max.cutoff: maximum cutoff value
+#' @return dendrogram marked with well mixed nodes
+MarkMixedNodePairwise <- function(d, mixing.cutoff=0.3, max.cutoff=0.6){
+
+  nodeMixing <- function(d, p, mixing.cutoff=0.3, max.cutoff=0.6){
+    if(p>mixing.cutoff & p<max.cutoff & !is.na(p)){
+      return(TRUE)
+    } else{
+      return(FALSE)
+    }
+  }
+
+  cbm <- function(d){
+    if(is.leaf(d)) {
+      normfac <- attr(d, 'normFac')
+      if(is.null(normfac)){
+        stop("please normalize tree first..........")
+      }
+
+      facname <- names(normfac)
+      if(length(facname) > 3){
+        stop("factor size > 3 is not supported")
+      }
+
+      if(length(facname) == 3){
+        p1 <- normfac[1]/sum(normfac[1:2])
+        p2 <- normfac[1]/sum(normfac[1:3])
+        p3 <- normfac[2]/sum(normfac[2:3])
+
+        # mixing across 3 species
+        if(nodeMixing(d, p1) & nodeMixing(d, p2) & nodeMixing(d, p3)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "bisque4"
+        } else if(nodeMixing(d, p1)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "blue"
+        } else if(nodeMixing(d, p2)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "green"
+        } else if(nodeMixing(d, p3)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "coral"
+        }
+      }
+
+      return(d)
+    } else{
+      oa <- attributes(d)
+      d <- lapply(d, cbm)
+      attributes(d) <- oa
+      normfac <- attr(d, 'normFac')
+      if(is.null(normfac)){
+        stop("please normalize tree first..........")
+      }
+
+      facname <- names(normfac)
+      if(length(facname) > 3){
+        stop("factor size > 3 is not supported")
+      }
+
+      if(length(facname) == 3){
+        p1 <- normfac[1]/sum(normfac[1:2])
+        p2 <- normfac[1]/sum(normfac[1:3])
+        p3 <- normfac[2]/sum(normfac[2:3])
+
+        # mixing across 3 species
+        if(nodeMixing(d, p1) & nodeMixing(d, p2) & nodeMixing(d, p3)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "bisque4"
+        } else if(nodeMixing(d, p1)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "blue"
+        } else if(nodeMixing(d, p2)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "green"
+        } else if(nodeMixing(d, p3)){
+          attr(d, "nodePar")$pch <- 19
+          attr(d, "nodePar")$col <- "coral"
+        }
       }
       return(d)
     }
@@ -888,7 +977,6 @@ dendSetWidthBysize <- function(d, scale=10){
 }
 
 #' Color tree based on mixing of species - unnormalized
-#'
 #' @param d dendrogram obj
 #' @param fac factor contains species and barcodes information
 #' @param colorpallete color pallete to color the tree
@@ -1061,76 +1149,6 @@ dendSetColorByNormMixing <- function(d, withinFacNorm=FALSE){
     }
   }
   cbm(d)
-}
-
-#' build entire tree based on dendrogram and subsampled dendrograms
-#' @param dend dendrogram obj of original tree
-#' @param subsamples list contains subsampled dendrograms and correspondent cell clusters
-#' @param cls.groups clusters of original dendrograms
-#' @param cellannot  cell annotations
-#' @param species factor annoted which cell belong to which species
-#' @param upperlevelannot higher-level cell annotations
-#' @param plot plot the built tree or not
-#' @export
-buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, species, upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE){
-  dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = cls.groups)
-  cls.groups <- dendr$new.groups
-
-  dend <- dendr$dendrogram
-  leafcontent <- dendr$leafcontent
-
-  if(!is.null(subsamples)){
-    stability.measurements <- TreeStabilityDend(dend, cls.groups, subsamples, n.cores=10)
-  } else{
-    stability.measurements = NULL
-  }
-
-  # add cluster attribute to dendrogram
-  dend <- AddTreeAttribute(dend, species, leafcontent)
-
-  dend <- dendSetWidthBysize(dend, scale=8)
-  leaflabels <- mappingLabel(dend, leafcontent, cellannot, humanAnnot=T)
-
-  # set labels
-  dend <- set_labels(dend, paste(dend %>% labels(), leaflabels, sep=" "))
-
-  # add upperlevel info to each nodes
-  if(!is.null(upperlevelannot[1])){
-    dend <- UpperLevelInfo(dend, cellannot=upperlevelannot, leafcontent, propCutoff = 0.1)
-    upperLevelnodes <- getUpperLevelNode(dend, cutoff=0.65)
-
-    # normalize Tree
-    dend <- NormTree(dend, upperLevelnodes, upperlevelannot, species)
-    dend <- dendSetColorByNormMixing(dend)
-  } else{
-    # need to modify
-    colorpallete <- colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)
-    dend <- dendSetColorByMixing(dend, species, leafContent, colorpallete)
-    upperLevelnodes = NULL
-    ##
-  }
-  if(plot){
-    if(!is.null(upperlevelannot) & !is.null(subsamples)){
-      par(cex=1, mar=c(20, 5, 0, 10))
-      plot(dend)
-      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
-      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
-           adj=c(0.4, 0.1), cex=0.35, col="red")
-    } else if(!is.null(upperlevelannot)){
-      par(cex=1, mar=c(20, 5, 0, 10))
-      plot(dend)
-      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
-    } else if(!is.null(subsamples)){
-      par(cex=1, mar=c(20, 5, 0, 10))
-      plot(dend)
-      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
-           adj=c(0.4, 0.1), cex=0.35, col="red")
-    }
-    else{
-      plot(dend)
-    }
-  }
-  return(list(dend=dend, stability=stability.measurements, upperLevelnodes=upperLevelnodes))
 }
 
 #' prune tree based on mixing
@@ -1329,6 +1347,77 @@ pruneTreeEntropy <- function(dend, cutoff=2.9){
   new_dend <- ladderize(fix_members_attr.dendrogram(new_dend), right=FALSE)
   return(new_dend)
 }
+
+#' build entire tree based on dendrogram and subsampled dendrograms automatically
+#' @param dend dendrogram obj of original tree
+#' @param subsamples list contains subsampled dendrograms and correspondent cell clusters
+#' @param cls.groups clusters of original dendrograms
+#' @param cellannot  cell annotations
+#' @param species factor annoted which cell belong to which species
+#' @param upperlevelannot higher-level cell annotations
+#' @param plot plot the built tree or not
+#' @export
+buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, species, upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE){
+  dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = cls.groups)
+  cls.groups <- dendr$new.groups
+
+  dend <- dendr$dendrogram
+  leafcontent <- dendr$leafcontent
+
+  if(!is.null(subsamples)){
+    stability.measurements <- TreeStabilityDend(dend, cls.groups, subsamples, n.cores=10)
+  } else{
+    stability.measurements = NULL
+  }
+
+  # add cluster attribute to dendrogram
+  dend <- AddTreeAttribute(dend, species, leafcontent)
+
+  dend <- dendSetWidthBysize(dend, scale=8)
+  leaflabels <- mappingLabel(dend, leafcontent, cellannot, humanAnnot=T)
+
+  # set labels
+  dend <- set_labels(dend, paste(dend %>% labels(), leaflabels, sep=" "))
+
+  # add upperlevel info to each nodes
+  if(!is.null(upperlevelannot[1])){
+    dend <- UpperLevelInfo(dend, cellannot=upperlevelannot, leafcontent, propCutoff = 0.1)
+    upperLevelnodes <- getUpperLevelNode(dend, cutoff=0.65)
+
+    # normalize Tree
+    dend <- NormTree(dend, upperLevelnodes, upperlevelannot, species)
+    dend <- dendSetColorByNormMixing(dend)
+  } else{
+    # need to modify
+    colorpallete <- colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)
+    dend <- dendSetColorByMixing(dend, species, leafContent, colorpallete)
+    upperLevelnodes = NULL
+    ##
+  }
+  if(plot){
+    if(!is.null(upperlevelannot) & !is.null(subsamples)){
+      par(cex=1, mar=c(20, 5, 0, 10))
+      plot(dend)
+      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
+      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
+           adj=c(0.4, 0.1), cex=0.35, col="red")
+    } else if(!is.null(upperlevelannot)){
+      par(cex=1, mar=c(20, 5, 0, 10))
+      plot(dend)
+      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
+    } else if(!is.null(subsamples)){
+      par(cex=1, mar=c(20, 5, 0, 10))
+      plot(dend)
+      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
+           adj=c(0.4, 0.1), cex=0.35, col="red")
+    }
+    else{
+      plot(dend)
+    }
+  }
+  return(list(dend=dend, stability=stability.measurements, upperLevelnodes=upperLevelnodes))
+}
+
 
 #' cross-species mapping summary: 1:1, or many:many
 #' @export
