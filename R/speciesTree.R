@@ -1170,9 +1170,8 @@ pruneTree <- function(dend, minCutoff=0.3, maxCutoff=0.4){
   is.father.of.subtree.to.merge <- function(dend, minCutoff, maxCutoff) {
     # this function checks if the subtree we wish to merge is the direct child of the current branch (dend) we entered the function
     is.father <- FALSE
-    for (i in seq_len(length(dend)))
-    {
-      ### test
+    for (i in seq_len(length(dend))){
+
       if(is.branch.mixed(dend[[i]], minCutoff, maxCutoff) == FALSE & !is.leaf(dend[[i]])) is.father <- TRUE
     }
     return(is.father)
@@ -1266,9 +1265,7 @@ pruneTreeEntropy <- function(dend, cutoff=2.9){
   is.father.of.subtree.to.merge <- function(dend, cutoff) {
     # this function checks if the subtree we wish to merge is the direct child of the current branch (dend) we entered the function
     is.father <- FALSE
-    for (i in seq_len(length(dend)))
-    {
-      ### test
+    for (i in seq_len(length(dend))){
       if(is.branch.mixed(dend[[i]], cutoff) == FALSE & !is.leaf(dend[[i]])) is.father <- TRUE
     }
     return(is.father)
@@ -1346,6 +1343,46 @@ pruneTreeEntropy <- function(dend, cutoff=2.9){
   new_dend <- ladderize(new_dend, right=FALSE)
   new_dend <- ladderize(fix_members_attr.dendrogram(new_dend), right=FALSE)
   return(new_dend)
+}
+
+#' Get robust homologous clusters from the tree
+#'  extract homologous clusters at the brach node where species begin to differentiate
+#' @param d pruned dendrogram
+#' @return factor contains homologous clusters
+getClusters <- function(d){
+
+  is.father.of.leafnodes <- function(d){
+    is.father <- FALSE
+    for (i in seq_len(length(d))){
+      if(is.leaf(d[[i]])) is.father <- TRUE
+    }
+    return(is.father)
+  }
+
+  search_tree <- function(d){
+    if (!is.father.of.leafnodes(d)){
+      for (i in seq_len(length(d))){
+        d[[i]] <- search_tree(d[[i]])
+      }
+    } else { # get node information
+      attr(d, "leaf") <- TRUE
+    }
+    #d <- ladderize(d, right=FALSE)
+    return(d)
+  }
+
+  d.pruned <- search_tree(d)
+  # get leaf clusters
+  cells <- get_leaves_attr(d.pruned, "nodesinfo")
+  sizes <- get_leaves_attr(d.pruned, "size")
+
+  clusters <- unlist(lapply(1:length(sizes), function(r){
+    rep(r, sizes[r])
+  }))
+  names(clusters) <- cells
+  clusters <- as.factor(clusters)
+
+  return(clusters)
 }
 
 #' build entire tree based on dendrogram and subsampled dendrograms automatically
