@@ -1,7 +1,6 @@
 # visulization functions
 
 #' visulize stability measurements of leaf nodes
-#' @param stability.measure data frame contains stability measurement
 #' @export
 plotStability <- function(stability.measure){
 
@@ -41,7 +40,7 @@ plot3factorLengend <- function(rate=15, base=0.001){
   d.blue= pmax(0,sin(-pi/3)* (x-(y+tan(-pi/3))/tan(-pi/3))/hc)
 
   # normalize in the same way
-  cm <- cbind(d.red,d.green,d.blue)
+  cm <- cbind(d.red, d.green, d.blue)
 
   cm <- dexp(cm, rate)
   #cm <- cbind(dexp(cm[,1], 0.3), dexp(cm[,2], 0.4), dexp(cm[,3], 0.3))
@@ -56,3 +55,17 @@ plot3factorLengend <- function(rate=15, base=0.001){
   points(x, y, col=col, pch=19, cex=0.5)
   #dev.off()
 }
+
+#' plot stability distribution based on descretized height in the tree
+#' @param dend dendrogram obj
+#' @export
+plotStabilityDistr <- function(dend){
+  height <- get_nodes_attr(dend, "height")
+  height.discretized <- discretize(height, breaks=c(0, 0.1, 0.2, 0.3, 1, 3.5), include.lowest=TRUE, method="fixed")
+  stability <- get_nodes_attr(dend, "stability")
+  stability.info <- data.frame(height=height.discretized, stability=stability)
+  ggplot(stability.info, aes(x=height, y=stability)) +
+    geom_boxplot() + theme_classic() + ggtitle("Distribution of Stability scores") +
+    scale_color_grey()
+}
+

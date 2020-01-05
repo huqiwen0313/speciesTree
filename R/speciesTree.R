@@ -250,7 +250,7 @@ subSamplingGraph <- function(g, method=rleiden.detection, stability.subsamples=1
   }
 
   if(is.null(sr)){
-    sr <- conos:::papply(1:stability.subsamples, function(i) subset.clustering(g,f=stability.subsampling.fraction,seed=i), n.cores=20)
+    sr <- conos:::papply(1:stability.subsamples, function(i) subset.clustering(g, f=stability.subsampling.fraction,seed=i), n.cores=20)
   }
 
   # save subsampled graph
@@ -480,7 +480,7 @@ TreeStabilityDend <- function(dend, cls.groups, subsamples, assignValuestoNode=T
   return(list(dendrogram=dend, stability.loc=xy, stability.labels=round(x[to], 2)))
 }
 
-# Caculate flat stability score based subsampling clusters
+#' Caculate flat stability score based subsampling clusters
 #' @export
 TreeStabilityFlat <- function(cls.groups, cls.subsamples, n.cores=10){
 
@@ -1343,6 +1343,22 @@ pruneTreeEntropy <- function(dend, cutoff=2.9){
   new_dend <- ladderize(new_dend, right=FALSE)
   new_dend <- ladderize(fix_members_attr.dendrogram(new_dend), right=FALSE)
   return(new_dend)
+}
+
+#' remove leaves with low stability score
+#' @param d dendrogram obj
+#' @param cutoff stability cutoff to prune the tree
+#' @return trimmed dendrogram
+removeLowStabilityLeaf <- function(d, cutoff=0.5){
+  if(is.null(attr(d, "stability"))){
+    stop("Please measure stability first ...")
+  }
+  leaf.stability <- get_leaves_attr(d, "stability")
+  leaf.labels <- get_leaves_attr(d, "label")
+  leaf.info <- data.frame(labels=leaf.labels, stability=leaf.stability)
+  leaf.info.filtered <- leaf.info[leaf.info$stability<=cutoff, ]$labels
+  d <- prune(d, leaves=as.character(leaf.info.filtered))
+  return(d)
 }
 
 #' Get robust homologous clusters from the tree
