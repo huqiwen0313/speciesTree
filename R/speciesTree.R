@@ -523,7 +523,7 @@ AddTreeAttribute <- function(d, fac, leafContent){
         return(d)
       } else {
         oa <- attributes(d)
-        d <- lapply(d,cbm,fac=fac);
+        d <- lapply(d,cbm,fac=fac)
         attributes(d) <- oa
         cc <- attr(d[[1]],'cc')+attr(d[[2]],'cc')
         attr(d,'cc') <- cc
@@ -1247,23 +1247,38 @@ pruneTree <- function(dend, minCutoff=0.3, maxCutoff=0.4){
   return(new_dend)
 }
 
-#' prune tree based on entropy
+#' prune tree based on entropy and other criteria
 #' @param dend dendrogram obj
 #' @param cutoff cutoff value
+#' @param mixing if turn on factor mixing criteria - at least
 #' @export
-pruneTreeEntropy <- function(dend, cutoff=2.9){
+pruneTreeEntropy <- function(dend, cutoff=2.9, mixing=FALSE, minCutoff=NULL){
 
   is.branch.mixed <- function(dend, cutoff){
     is.mixed <- FALSE
+
+    if(mixing){
+      if(is.null(minCutoff)){
+        stop("please provide cutoff values")
+      }
+    }
     entropy <- attr(dend, "entropy")
-    if(entropy > cutoff){
-      is.mixed <- TRUE
+    normPercentage <- attr(dend, "normPercentage")
+    if(mixing){
+      if(entropy > cutoff | length(normPercentage[normPercentage >= minCutoff]) > 2){
+        is.mixed <- TRUE
+      }
+    } else{
+      if(entropy > cutoff){
+        is.mixed <- TRUE
+      }
     }
     return(is.mixed)
   }
 
-  is.father.of.subtree.to.merge <- function(dend, cutoff) {
-    # this function checks if the subtree we wish to merge is the direct child of the current branch (dend) we entered the function
+  is.father.of.subtree.to.merge <- function(dend, cutoff){
+    # this function checks if the subtree we wish to merge is the direct child of the current branch (dend)
+    #  we entered the function
     is.father <- FALSE
     for (i in seq_len(length(dend))){
       if(is.branch.mixed(dend[[i]], cutoff) == FALSE & !is.leaf(dend[[i]])) is.father <- TRUE
@@ -1401,16 +1416,30 @@ getClusters <- function(d){
   return(clusters)
 }
 
+#' get leaf clusters
+#' @param dend dendrogram object
+#' @return cell clusters at leaf nodes
+getLeafClusters <- function(dend){
+  clusters <- labels(dend)
+  cells <- get_leaves_attr(dend, "nodesinfo")
+  sizes <- get_leaves_attr(dend, "size")
+  clusters <- unlist(lapply(1:length(sizes), function(r){ rep(clusters[r], sizes[r])}))
+  names(clusters) <- cells
+  return(clusters)
+}
+
 #' build entire tree based on dendrogram and subsampled dendrograms automatically
 #' @param dend dendrogram obj of original tree
-#' @param subsamples list contains subsampled dendrograms and correspondent cell clusters
+#' @param expMatrix gene expression matrix
+#' @param subClusters list contains subsampled cell clusters
 #' @param cls.groups clusters of original dendrograms
 #' @param cellannot  cell annotations
 #' @param species factor annoted which cell belong to which species
 #' @param upperlevelannot higher-level cell annotations
 #' @param plot plot the built tree or not
 #' @export
-buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, species, upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE){
+buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups, mappingcells=FALSE, cellannot=NULL, species,
+                             upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE){
   dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = cls.groups)
   cls.groups <- dendr$new.groups
 
@@ -1418,19 +1447,26 @@ buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, speci
   leafcontent <- dendr$leafcontent
 
   if(!is.null(subsamples)){
-    stability.measurements <- TreeStabilityDend(dend, cls.groups, subsamples, n.cores=10)
+    subsampled.dend <- subSampleTree(expMatrix, subsample.groups=subsampledClusters)
+    stability.measurements <- TreeStabilityDend(dend, cls.groups, subsampled.dend, n.cores=10)
+    dend <- stability.measurements$dendrogram
+    #stability.measurements <- TreeStabilityDend(dend, cls.groups, subsamples, n.cores=10)
   } else{
     stability.measurements = NULL
   }
 
   # add cluster attribute to dendrogram
   dend <- AddTreeAttribute(dend, species, leafcontent)
-
   dend <- dendSetWidthBysize(dend, scale=8)
-  leaflabels <- mappingLabel(dend, leafcontent, cellannot, humanAnnot=T)
 
-  # set labels
-  dend <- set_labels(dend, paste(dend %>% labels(), leaflabels, sep=" "))
+  if(mappingcells){
+    if(is.null(cellannot)){
+      stop("Please provide cell annotations")
+    }
+    leaflabels <- mappingLabel(dend, leafcontent, cellannot, humanAnnot=T)
+    # set labels
+    dend <- set_labels(dend, paste(dend %>% labels(), leaflabels, sep=" "))
+  }
 
   # add upperlevel info to each nodes
   if(!is.null(upperlevelannot[1])){
@@ -1445,19 +1481,17 @@ buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, speci
     colorpallete <- colorRampPalette(c("blue", "grey", "grey", "grey", "red"))(101)
     dend <- dendSetColorByMixing(dend, species, leafContent, colorpallete)
     upperLevelnodes = NULL
-    ##
   }
   if(plot){
     if(!is.null(upperlevelannot) & !is.null(subsamples)){
       par(cex=1, mar=c(20, 5, 0, 10))
       plot(dend)
       text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
-      text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
-           adj=c(0.4, 0.1), cex=0.35, col="red")
+      text(get_nodes_xy(dend), labels=get_nodes_attr(dend, "stability"), adj=c(0.4,0.4), cex=0.3, col="red")
     } else if(!is.null(upperlevelannot)){
       par(cex=1, mar=c(20, 5, 0, 10))
       plot(dend)
-      text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
+      text(get_nodes_xy(dend), labels=get_nodes_attr(dend, "stability"), adj=c(0.4,0.4), cex=0.3, col="red")
     } else if(!is.null(subsamples)){
       par(cex=1, mar=c(20, 5, 0, 10))
       plot(dend)
@@ -1468,9 +1502,8 @@ buildSpeciesTree <- function(dend, subsamples=NULL, cls.groups, cellannot, speci
       plot(dend)
     }
   }
-  return(list(dend=dend, stability=stability.measurements, upperLevelnodes=upperLevelnodes))
+  return(list(dend=dend, upperLevelnodes=upperLevelnodes))
 }
-
 
 #' cross-species mapping summary: 1:1, or many:many
 #' @export

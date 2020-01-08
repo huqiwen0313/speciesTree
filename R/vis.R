@@ -61,7 +61,7 @@ plot3factorLengend <- function(rate=15, base=0.001){
 #' @export
 plotStabilityDistr <- function(dend){
   height <- get_nodes_attr(dend, "height")
-  height.discretized <- discretize(height, breaks=c(0, 0.1, 0.2, 0.3, 1, 3.5), include.lowest=TRUE, method="fixed")
+  height.discretized <- discretize(height, breaks=c(0, 0.1, 0.2, 0.3, 1, max(height)), include.lowest=TRUE, method="fixed")
   stability <- get_nodes_attr(dend, "stability")
   stability.info <- data.frame(height=height.discretized, stability=stability)
   ggplot(stability.info, aes(x=height, y=stability)) +
