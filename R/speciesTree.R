@@ -579,6 +579,7 @@ UpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
 #' @param d: dendrogram object
 #' @param cellannot: factor contains upperlevel annotation for each cell
 #' @param leafContent: leafcontent structure for each cluster
+#' @returen dendrogram
 #' @export
 AllUpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
 
@@ -641,7 +642,7 @@ getUpperLevelNode <- function(dend, cutoff=0.7){
   return(list(upperlabel=uppernodes$upperlabel, xy=uppernodes[, 1:2], percentage=uppernodes$percentage, height=uppernodes$height))
 }
 
-#' normalize to upperlevel
+#' normalize tree based upperlevel annotation
 #'
 #' @param d: dendrogram
 #' @param cellannot: factor contains upperlevel annotation for each cell
@@ -726,7 +727,7 @@ NormTree <- function(d, upperLevelnodes, cellannot, fac, cutoff=0.7){
   cbm(d, cellannot)
 }
 
-#' Normalize tree based on within-factors
+#' Normalize tree based on within-factor mixing
 #' @param dend dendrogram obj
 #' @param fac factor contain all cells and their correspondent annotation
 #' @return dendrogram with normalized values
@@ -783,7 +784,7 @@ NormTreeWithinFactor <- function(d, fac, facprefix=c("human", "marmoset", "mouse
   cbm(d)
 }
 
-#' caculate branch entropy attribute for normalized value
+#' caculate branch entropy for normalized value
 #' @param d dendrogram
 #' @return add entropy attributes into the dendrogram
 #' @import entropy
@@ -1234,9 +1235,7 @@ pruneTree <- function(dend, minCutoff=0.3, maxCutoff=0.4){
     if(length(dend.label)==length(label.updated)){
       return(dend)
     } else{
-      #dend.label <- label.updated
       dend <- prune_mixed_subtree(dend, minCutoff, maxCutoff)
-      #label.updated <- labels(dend)
     }
   }
 
@@ -1308,11 +1307,13 @@ pruneTreeEntropy <- function(dend, cutoff=2.9, mixing=FALSE, minCutoff=NULL){
           attr(dend[[subtree_loc]], "cc") <- branch.attributes$cc
           attr(dend[[subtree_loc]], "size") <- branch.attributes$size
           attr(dend[[subtree_loc]], "edgePar") <- branch.attributes$edgePar
+          attr(dend[[subtree_loc]], "nodePar") <- branch.attributes$nodePar
           attr(dend[[subtree_loc]], "nodesinfo") <- branch.attributes$nodesinfo
           attr(dend[[subtree_loc]], "percentage") <- branch.attributes$percentage
           attr(dend[[subtree_loc]], "normPercentage") <- branch.attributes$normPercentage
           attr(dend[[subtree_loc]], "stability") <- branch.attributes$stability
           attr(dend[[subtree_loc]], "entropy") <- branch.attributes$entropy
+          attr(dend[[subtree_loc]], "normFac") <- branch.attributes$normFac
         }
       }
 
@@ -1328,11 +1329,13 @@ pruneTreeEntropy <- function(dend, cutoff=2.9, mixing=FALSE, minCutoff=NULL){
           attr(dend[[subtree_loc+1]], "cc") <- branch.attributes$cc
           attr(dend[[subtree_loc+1]], "size") <- branch.attributes$size
           attr(dend[[subtree_loc+1]], "edgePar") <- branch.attributes$edgePar
+          attr(dend[[subtree_loc+1]], "nodePar") <- branch.attributes$nodePar
           attr(dend[[subtree_loc+1]], "nodesinfo") <- branch.attributes$nodesinfo
           attr(dend[[subtree_loc+1]], "percentage") <- branch.attributes$percentage
           attr(dend[[subtree_loc+1]], "normPercentage") <- branch.attributes$normPercentage
           attr(dend[[subtree_loc+1]], "stability") <- branch.attributes$stability
           attr(dend[[subtree_loc+1]], "entropy") <- branch.attributes$entropy
+          attr(dend[[subtree_loc+1]], "normFac") <- branch.attributes$normFac
         }
       }
     }
@@ -1376,11 +1379,19 @@ removeLowStabilityLeaf <- function(d, cutoff=0.5){
   return(d)
 }
 
-#' Get robust homologous clusters from the tree
-#'  extract homologous clusters at the brach node where species begin to differentiate
+#' Get robust homologous clusters from the tree based on species (factor) mixing.
+#' Clusters are selected at the nodes where one species (factor) begin to differentiate from the other species (factors)
 #' @param d pruned dendrogram
-#' @return factor contains homologous clusters
-getClusters <- function(d){
+#' @param plotTree if TRUE, plot the dendrogram and its correspondent integrative clusters
+#' @param plotleafLabel TRUE/FALSE, if TRUE visualize leaf labels
+#' @upperlevelannot upperlevel annotation, plot top level annotation in the tree
+#' @cell.group list contains specific cell group to visualize at the bottom of the tree
+#' @furtherStop if TRUE it will go one-step further beyond the current homologous nodes. In this case,
+#'              it may get one/two species-specific cluster(s) and one/0 well-mixed clusters.
+#' @return factor contains robust cluster IDs and their correspondent cell IDs
+#' @export
+getClusters <- function(d, plotTree=TRUE, plotleafLabel=FALSE, upperlevelannot=NULL, cell.group=NULL,
+                        furtherStop=FALSE){
 
   is.father.of.leafnodes <- function(d){
     is.father <- FALSE
@@ -1396,7 +1407,30 @@ getClusters <- function(d){
         d[[i]] <- search_tree(d[[i]])
       }
     } else { # get node information
-      attr(d, "leaf") <- TRUE
+      if(furtherStop){
+        if(!is.leaf(d[[1]])){
+          attr(d[[1]], "leaf") <- TRUE
+          attr(d[[1]], "leaflabels") <- labels(d[[1]])
+          attr(d[[1]], "leafSize") <- length(labels(d[[1]]))
+          attr(d[[2]], "leaflabels") <- labels(d[[2]])
+          attr(d[[2]], "leafSize") <- length(labels(d[[2]]))
+        } else if(!is.leaf(d[[2]])){
+          attr(d[[2]], "leaf") <- TRUE
+          attr(d[[2]], "leaflabels") <- labels(d[[2]])
+          attr(d[[2]], "leafSize") <- length(labels(d[[2]]))
+          attr(d[[1]], "leaflabels") <- labels(d[[1]])
+          attr(d[[1]], "leafSize") <- length(labels(d[[1]]))
+        } else{
+          attr(d[[1]], "leaflabels") <- labels(d[[1]])
+          attr(d[[1]], "leafSize") <- length(labels(d[[1]]))
+          attr(d[[2]], "leaflabels") <- labels(d[[2]])
+          attr(d[[2]], "leafSize") <- length(labels(d[[2]]))
+        }
+      } else{
+        attr(d, "leaf") <- TRUE
+        attr(d, "leaflabels") <- labels(d)
+        attr(d, "leafSize") <- length(labels(d))
+      }
     }
     #d <- ladderize(d, right=FALSE)
     return(d)
@@ -1413,12 +1447,54 @@ getClusters <- function(d){
   names(clusters) <- cells
   clusters <- as.factor(clusters)
 
+  if(plotTree){
+    bars <- get_leaves_attr(d.pruned, "leafSize")
+    colorbars <- unlist(lapply(1:length(bars), function(r){
+      rep(r, bars[r])
+    }))
+    if(plotleafLabel){
+      plot(d)
+    } else{
+      plot(d, leaflab="none")
+    }
+    if(!is.null(upperlevelannot)){
+      text(upperlevelannot$xy, labels=upperlevelannot$upperlabel, adj=c(0.5, -0.5), cex=1, col="red")
+    }
+
+    # visualize cell groups
+    cellcolorbar <- NULL
+    if(!is.null(cell.group)){
+      # check the location of cell groups in leafnode
+      getCellpos <- function(cells){
+        leafcluster <- getLeafClusters(d)
+        cluster.name <- names(table(leafcluster))
+        cell.color.bar <- unlist(lapply(1:length(cluster.name), function(r){
+          cellProp <- intersect(cells, names(leafcluster[leafcluster==cluster.name[r]]))
+          if(length(cellProp)/length(cells) > 0.1){
+            1
+          } else{
+            8
+          }
+        }))
+        return(cell.color.bar)
+      }
+      cellcolorbar <- dplyr::bind_cols(lapply(cell.group, getCellpos))
+    }
+    if(!is.null(cellcolorbar)){
+      thebar <- cbind(cellcolorbar, colorbars)
+    } else{
+      thebar <- colorbars
+    }
+    names(thebar)[ncol(thebar)]  <- "Clusters"
+    colored_bars(colors=thebar, dend=d, y_shift=-0.06, sort_by_labels_order = FALSE, cex.rowLabels = 0.5)
+  }
   return(clusters)
 }
 
 #' get leaf clusters
 #' @param dend dendrogram object
 #' @return cell clusters at leaf nodes
+#' @export
 getLeafClusters <- function(dend){
   clusters <- labels(dend)
   cells <- get_leaves_attr(dend, "nodesinfo")
@@ -1503,6 +1579,37 @@ buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups
     }
   }
   return(list(dend=dend, upperLevelnodes=upperLevelnodes))
+}
+
+#' Visualize leaf nodes in the tree based on specific cell groups
+#' @param dend dendrogram obj
+#' @param cells vector contains cellID
+#' @param col node color
+#' @pure.cutoff if the purity of cell composition of a node below the cutoff, not visualize it
+#' @returen dendrogram obj that mark leaf nodes contain specific cells
+#' @export
+MarkCells <- function(dend, cells, col="blue", pure.cutoff=0.5){
+  cbm <- function(dend){
+    if(is.leaf(dend)) {
+      nodeCells <- attr(dend, 'nodesinfo')
+      targetCells <- nodeCells[nodeCells %in% cells]
+      purity <- length(targetCells)/length(nodeCells)
+
+      if(purity > pure.cutoff){
+        attr(dend, "nodePar")$pch <- 19
+        attr(dend, "nodePar")$col <- col
+        attr(dend, "nodePar")$cex <- purity * 1.8
+        #attr(dend, "nodePar")$cex <- 1
+      }
+      return(dend)
+    } else{
+      oa <- attributes(dend)
+      dend <- lapply(dend, cbm)
+      attributes(dend) <- oa
+      return(dend)
+    }
+  }
+  cbm(dend)
 }
 
 #' cross-species mapping summary: 1:1, or many:many
