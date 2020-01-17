@@ -481,6 +481,8 @@ TreeStabilityDend <- function(dend, cls.groups, subsamples, assignValuestoNode=T
 }
 
 #' Caculate flat stability score based subsampling clusters
+#' @param cls.groups origal cell clusters
+#' @param cls.subsamples list contains subsampled cell clusters
 #' @export
 TreeStabilityFlat <- function(cls.groups, cls.subsamples, n.cores=10){
 
@@ -1389,6 +1391,8 @@ removeLowStabilityLeaf <- function(d, cutoff=0.5){
 #' @furtherStop if TRUE it will go one-step further beyond the current homologous nodes. In this case,
 #'              it may get one/two species-specific cluster(s) and one/0 well-mixed clusters.
 #' @return factor contains robust cluster IDs and their correspondent cell IDs
+#' @import RColorBrewer
+#' @import colorspace
 #' @export
 getClusters <- function(d, plotTree=TRUE, plotleafLabel=FALSE, upperlevelannot=NULL, cell.group=NULL,
                         furtherStop=FALSE){
@@ -1448,10 +1452,20 @@ getClusters <- function(d, plotTree=TRUE, plotleafLabel=FALSE, upperlevelannot=N
   clusters <- as.factor(clusters)
 
   if(plotTree){
+    clpalette <- function(n){
+      all.colors <- colors()
+      qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+      cols = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+      cols <- c(cols, sample(cols))
+      cols[1:n]
+    }
     bars <- get_leaves_attr(d.pruned, "leafSize")
     colorbars <- unlist(lapply(1:length(bars), function(r){
       rep(r, bars[r])
     }))
+    clusterColorbars <- clpalette(max(colorbars))
+    clusterColorbars <- clusterColorbars[colorbars]
+
     if(plotleafLabel){
       plot(d)
     } else{
@@ -1469,23 +1483,30 @@ getClusters <- function(d, plotTree=TRUE, plotleafLabel=FALSE, upperlevelannot=N
         leafcluster <- getLeafClusters(d)
         cluster.name <- names(table(leafcluster))
         cell.color.bar <- unlist(lapply(1:length(cluster.name), function(r){
-          cellProp <- intersect(cells, names(leafcluster[leafcluster==cluster.name[r]]))
+          leafcells <- names(leafcluster[leafcluster==cluster.name[r]])
+          cellProp <- intersect(cells, leafcells)
           if(length(cellProp)/length(cells) > 0.1){
-            1
+            #1
+            round(length(cellProp)/length(cells), 1)
           } else{
-            8
+            #8
+            0
           }
         }))
         return(cell.color.bar)
       }
-      cellcolorbar <- dplyr::bind_cols(lapply(cell.group, getCellpos))
+      cellcolorbar <- dplyr::bind_cols(lapply(cell.group, getCellpos)) * 10
+      # generate color pallete
+      colorPallete <- sequential_hcl(11, h = 260, c = c(100, 0), l = c(25, 100), rev = TRUE, power = 1)
+      cellcolorbar <- apply(cellcolorbar, 2, function(r){colorPallete[r+1]})
     }
     if(!is.null(cellcolorbar)){
-      thebar <- cbind(cellcolorbar, colorbars)
+      thebar <- cbind(cellcolorbar, as.data.frame(clusterColorbars))
+      names(thebar)[ncol(thebar)]  <- "Clusters"
     } else{
-      thebar <- colorbars
+      thebar <- as.data.frame(clusterColorbars)
+      names(thebar)[ncol(thebar)]  <- "Clusters"
     }
-    names(thebar)[ncol(thebar)]  <- "Clusters"
     colored_bars(colors=thebar, dend=d, y_shift=-0.06, sort_by_labels_order = FALSE, cex.rowLabels = 0.5)
   }
   return(clusters)
