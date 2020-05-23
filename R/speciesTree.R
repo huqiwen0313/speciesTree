@@ -1648,6 +1648,7 @@ pruneTreeWithSpecies <- function(d, purityCutoff=0.8){
 #' @param sizeCutoff cut leaf nodes that have size below sizeCutoff
 #' @param sizeOnly only cut tree based on the size of leaf nodes
 #' @return trimmed dendrogram
+#' @export
 removeLowStabilityLeaf <- function(d, cutoff=0.5, sizeOnly=FALSE, sizeCutoff=1){
   if(is.null(attr(d, "stability")) & sizeOnly==FALSE){
     stop("Please measure stability first ...")
@@ -2040,6 +2041,7 @@ buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups
 #' @param d dendrogram obj
 #' @param heightDiff differences in height between two branches
 #' @return dendrogram object that has the same height for each subcluster
+#' @export
 adjustTreeheight <- function(d, scale=1){
   rootDepth <- max_depth(d)
   #step <- scale/rootDepth
@@ -2049,7 +2051,7 @@ adjustTreeheight <- function(d, scale=1){
   d <- assign_values_to_nodes(d, "label", seq(1, nnodes(d), 1))
 
   # get all pathes from root to leave nodes
-  subtrees <- partition_leaves(d)
+  subtrees <- dendextend::partition_leaves(d)
   leafNodes <- subtrees[[1]]
   pathRoutes <- function(leafnodes) {
     which(sapply(subtrees, function(x) leafnodes %in% x))
@@ -2087,6 +2089,7 @@ adjustTreeheight <- function(d, scale=1){
 #' @param plotLeafLabel TRUE/FALSE show leaf label if TRUE
 #' @param base scale to adjust plot width
 #' @return dendrogram panel aligned at the same scale
+#' @export
 alignTreePlot <- function(treelist, plotUpperlevelinfo=TRUE, plotLeafLabel=FALSE, label.size=1, base=10){
   maxdepth <- max(unlist(lapply(treelist, max_depth)))
 
@@ -2139,6 +2142,7 @@ alignTreePlot <- function(treelist, plotUpperlevelinfo=TRUE, plotLeafLabel=FALSE
 #' @param dendrogram obj with all the attributes
 #' @param heightflag if TRUE, caculate leave depth based on the expression distance
 #' @return # of leaves below an upperlevel branch
+#' @export
 leavesSubtree <- function(d, heightflag=TRUE){
   # re-asign labels to dendrogram in the depth first search order
   #   in this case, the label of root node will be 1
@@ -2161,9 +2165,9 @@ leavesSubtree <- function(d, heightflag=TRUE){
     which(sapply(subtrees, function(x) leafnodes %in% x))
   }
   paths <- lapply(leafNodes, pathRoutes)
-  paths <- lapply(paths, function(r){
-    names(r) <- seq(1, length(r), 1)
-  })
+  #paths <- lapply(paths, function(r){
+  #  names(r) <- seq(1, length(r), 1)
+  #})
 
   # caculate number of leaves below a subtree
   nleaves.below.subtree <- lapply(1:nrow(nodes.info), function(n){
