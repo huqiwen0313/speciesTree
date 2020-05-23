@@ -158,6 +158,7 @@ mappingLabel <- function(d, leafcontent, cellannot, humanAnnot=FALSE, purity=FAL
 #' @param attribute attribute name
 #' @param value vector contains attribute values
 #' @return dendrogram obj with new attributes added to each node
+#' @export
 assign_values_to_nodes <- function(dend, attribute, value){
   if (!is.dendrogram(dend)) stop("'dend' should be a dendrogram.")
 
@@ -355,16 +356,20 @@ subsampleTree.conos <- function(graph, subsample.groups=NULL, stability.subsampl
   # based on conos graph function
   computeGraphDistance <- function(graph){
     conn.comps <- igraph::components(graph)
+    #min.visited.verts=1000
+    #min.visited.verts = min(min.visited.verts, min(conn.comps$csize) - 1)
     min.visited.verts=1000
     min.visited.verts = min(min.visited.verts, min(conn.comps$csize) - 1)
+    max.hitting.nn.num=0
+    max.commute.nn.num=0
+    min.prob.lower=1e-7
+    min.prob=1e-3
+
     if(max.hitting.nn.num == 0) {
       max.hitting.nn.num <- length(igraph::V(graph)) - 1
     }
     adj.info <- graphToAdjList(graph)
 
-    max.hitting.nn.num=0
-    max.commute.nn.num=0
-    min.prob.lower=1e-7
     commute.times <- get_nearest_neighbors(adj.info$idx, adj.info$probabilities, min_prob=min.prob,
                                            min_visited_verts=min.visited.verts, n_cores=1, max_hitting_nn_num=max.hitting.nn.num,
                                            max_commute_nn_num=max.commute.nn.num, min_prob_lower=min.prob.lower, verbose=TRUE)
@@ -655,7 +660,7 @@ UpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
 #' @param d: dendrogram object
 #' @param cellannot: factor contains upperlevel annotation for each cell
 #' @param leafContent: leafcontent structure for each cluster
-#' @returen dendrogram
+#' @return dendrogram
 #' @export
 AllUpperLevelInfo <- function(d, cellannot, leafContent, propCutoff=0.15){
 
@@ -1855,9 +1860,9 @@ getClusters <- function(d, plotTree=TRUE, plotleafLabel=FALSE, upperlevelannot=N
         cell.color.bar <- unlist(lapply(1:length(cluster.name), function(r){
           leafcells <- names(leafcluster[leafcluster==cluster.name[r]])
           cellProp <- intersect(cells, leafcells)
-          if(length(cellProp)/length(cells) > 0.1){
+          if(length(cellProp)/min(length(cells), length(leafcells)) > 0.1){
             #1
-            round(length(cellProp)/length(cells), 1)
+            round(length(cellProp)/min(length(cells), length(leafcells)), 1)
           } else{
             #8
             0
@@ -1937,7 +1942,7 @@ get_divergent_heuristic_clusters <- function(d, plot=TRUE){
 
 #' get leaf clusters
 #' @param dend dendrogram object
-#' @renameClusterlabel if TRUE, rename the cluster labels at leaf nodes
+#' @param renameClusterlabel if TRUE, rename the cluster labels at leaf nodes
 #' @return cell clusters at leaf nodes
 #' @export
 getLeafClusters <- function(dend, renameClusterlabel=FALSE){
@@ -2132,7 +2137,7 @@ alignTreePlot <- function(treelist, plotUpperlevelinfo=TRUE, plotLeafLabel=FALSE
 
 #' Calculate leaf statistics in subtrees (below an upperlevel annot)
 #' @param dendrogram obj with all the attributes
-#' @heightflag if TRUE, caculate leave depth based on the expression distance
+#' @param heightflag if TRUE, caculate leave depth based on the expression distance
 #' @return # of leaves below an upperlevel branch
 leavesSubtree <- function(d, heightflag=TRUE){
   # re-asign labels to dendrogram in the depth first search order
@@ -2158,7 +2163,6 @@ leavesSubtree <- function(d, heightflag=TRUE){
   paths <- lapply(leafNodes, pathRoutes)
   paths <- lapply(paths, function(r){
     names(r) <- seq(1, length(r), 1)
-    return(r)
   })
 
   # caculate number of leaves below a subtree
@@ -2207,8 +2211,8 @@ leavesSubtree <- function(d, heightflag=TRUE){
 #' @param dend dendrogram obj
 #' @param cells vector contains cellID
 #' @param col node color
-#' @pure.cutoff if the purity of cell composition of a node below the cutoff, not visualize it
-#' @returen dendrogram obj that mark leaf nodes contain specific cells
+#' @param pure.cutoff if the purity of cell composition of a node below the cutoff, not visualize it
+#' @return dendrogram obj that mark leaf nodes contain specific cells
 #' @export
 MarkCells <- function(dend, cells, col="blue", pure.cutoff=0.5){
   cbm <- function(dend){
@@ -2238,6 +2242,7 @@ MarkCells <- function(dend, cells, col="blue", pure.cutoff=0.5){
 #' Add attribute to monitor within-species composition
 #' @param d dendrogram object
 #' @return dendrogram with attribute contains within-species cluster percentage
+#' @export
 addWithinSpeciesComp <- function(d, purityCutoff=0.1, humanAnnot, mouseAnnot, marmoAnnot){
   humanClusterDistr <- table(humanAnnot)
   mouseClusterDistr <- table(mouseAnnot)
@@ -2303,7 +2308,7 @@ addWithinSpeciesComp <- function(d, purityCutoff=0.1, humanAnnot, mouseAnnot, ma
 #' get marker genes that differentiate expressed between two groups - adapted from pagoda2 getDifferentialGenes function
 #' @param count gene expression matrix: rows are genes and columns are cells
 #' @param ntop get top n marker genes
-#' @groups vector contains cell and group information
+#' @param groups vector contains cell and group information
 #' @return lists of genes that differentiate two cell populations
 #' @export
 GetDifferentialGenes <- function(count, groups=NULL, upregulated.only=FALSE, z.threshold=3, ntop=15){
@@ -2367,8 +2372,10 @@ GetDifferentialGenes <- function(count, groups=NULL, upregulated.only=FALSE, z.t
 #' add marker genes that differentiate sister branches
 #' @param d dendrogram object
 #' @param count count matrix - rows are genes and columns are cells
+#' @param addAUC estimate AUC based on random forest using expression of markers
+#'               may take long time to run.
 #' @export
-AddMarkersToTree <- function(d, count){
+AddMarkersToTree <- function(d, count, addAUC=TRUE){
   calculate_marker <- function(d){
     for(i in seq_len(length(d))){
       if(!is.leaf(d[[i]])){
@@ -2376,15 +2383,274 @@ AddMarkersToTree <- function(d, count){
         groups <- setNames(c(rep("1", length(attr(d[[i]][[1]], "nodesinfo"))),
                              rep("2", length(attr(d[[i]][[2]], "nodesinfo")))), cells)
 
+        #print("calculate markers for each node................")
         diffgene.list <- GetDifferentialGenes(count, groups=groups)
         attr(d[[i]][[1]], "marker") <- diffgene.list[[1]]
         attr(d[[i]][[2]], "marker") <- diffgene.list[[2]]
+
+        markers <- c(as.character(diffgene.list[[1]]$Gene), as.character(diffgene.list[[2]]$Gene))
+
+        # calculate AUC
+        if(addAUC){
+          #print("run random forest on markers based on 3-fold CV......")
+          counts <- t(count)
+          counts.bin <- (counts[names(groups), markers, drop=F] > 0)
+          #counts.markers <- as.data.frame(counts[names(groups), markers, drop=F])
+          #counts.markers$group <- "1"
+          #counts.markers[rownames(counts.markers) %in% names(groups[groups==2]), ]$group <- "2"
+
+          ### divide training and testing group randomly (20% for testing)
+          #sampleTesting <- sample(1:nrow(counts.markers), floor(nrow(counts.markers)*0.2))
+          #trainData <- counts.markers[-sampleTesting, ]
+          #testData <- counts.markers[sampleTesting, ]
+
+          #rfModel <- caret::train(trainData[, -1*which(colnames(trainData) == "group")],
+          #             as.factor(trainData$group), method="rf",
+          #             trControl = caret::trainControl(method = "cv",number = 3))
+          #rfPredict <- predict(rfModel, testData[, -1*which(colnames(testData) == "group")])
+          #auc <- pROC::auc(pROC::roc(testData$group, as.numeric(rfPredict)))[1]
+
+          counts.bin.Genesums <- Matrix::colSums(counts.bin)
+          counts.bin.Groupsums <- Matrix::colSums(counts.bin & (groups == names(table(groups))))
+          auc <- mean(apply(counts.bin, 2, function(col) pROC::auc(as.integer(groups), as.integer(col))))
+          attr(d[[i]], "auc") <- auc
+        }
+
         d[[i]] <- calculate_marker(d[[i]])
       }
     }
     return(d)
   }
   d <- calculate_marker(d)
+  return(d)
+}
+
+#' add assoiated genes that differentiate cells from one node from the other cells
+#' @param d dendrogram object
+#' @param count count matrix - rows are genes and columns are cells from one species
+#' @param prefix based factor(species) to extract associated genes
+#'
+#' @export
+AddassGeneToTree <- function(d, count, prefix="human", ntop=30){
+  calculate_marker <- function(d){
+    for(i in seq_len(length(d))){
+      if(!is.leaf(d[[i]])){
+        cells <- attr(d[[i]], "nodesinfo")
+        cells <- cells[cells %in% colnames(count)]
+        cellsOut <- colnames(count)[-1*which(colnames(count) %in% cells)]
+        groups <- setNames(c(rep("1", length(cells)), rep("2", length(cellsOut))), c(cells, cellsOut))
+
+        #print("calculate markers for each node................")
+        diffgene.list <- GetDifferentialGenes(count, groups=groups, ntop=ntop)
+        attr(d[[i]], "assGenes") <- diffgene.list[[1]]
+        d[[i]] <- calculate_marker(d[[i]])
+      }
+    }
+    return(d)
+  }
+  d <- calculate_marker(d)
+  return(d)
+}
+
+#' Binormial proportion test to identify genes show different expression patterns across factor/species based on
+#'   the cells at each node of the tree - (not depend on marker genes)
+#' @param d dendrogram object
+#' @param count combined raw count matrix - rows are cells, columns are genes
+#' @param prefix cell prefix to make the comparison - default: human vs marmoset and human vs mouse
+#' @param sampleCells if TRUE, sampled cells based on the cell distribution in group
+#' @return dendrogram with proportion test attributes
+#' @export
+AddProportionTest <- function(d, count, prefix=c("human", "marmoset", "mouse"), sampleCell=TRUE,
+                              group=NULL, n.cores=20){
+  if(length(prefix) < 3){
+    stop("currently only support two group comparison")
+  }
+  propTestNode <- function(d){
+    for(i in seq_len(length(d))){
+      if(!is.leaf(d[[i]])){
+        cells <- attr(d[[i]], "nodesinfo")
+        cellsOut <- rownames(count)[-which(rownames(count) %in% cells)]
+        if(sampleCell){
+          if(is.null(group)){
+            stop("please provide group annotation")
+          }
+          cells <- sampleCells(cells, group)
+          cellsOut <- sampleCells(cellsOut, group)
+        }
+        group1Cells <- cells[grep(prefix[1], cells)]
+        group2Cells <- cells[grep(prefix[2], cells)]
+        group3Cells <- cells[grep(prefix[3], cells)]
+        group1OutCells <- cellsOut[grep(prefix[1], cellsOut)]
+        group2OutCells <- cellsOut[grep(prefix[2], cellsOut)]
+        group3OutCells <- cellsOut[grep(prefix[3], cellsOut)]
+        cellannot <- setNames(c(rep(prefix[1], length(group1Cells)), rep(prefix[2], length(group2Cells)),
+                                rep(prefix[3], length(group3Cells))), c(group1Cells, group2Cells, group3Cells))
+        cellannotOut <- setNames(c(rep(prefix[1], length(group1OutCells)), rep(prefix[2], length(group2OutCells)),
+                                   rep(prefix[3], length(group3OutCells))), c(group1OutCells, group2OutCells, group3OutCells))
+
+        # gene expression value for each factor(species)
+        expByGroup <- conos:::collapseCellsByType(count, cellannot) %>% apply(2, function(r){
+          r/sum(r)
+        }) %>% t
+        #expByGroup <- expByGroup[!is.na(expByGroup[, 1]), ]
+        colnames(expByGroup) <- paste(names(table(cellannot)), c("exp"), sep="_")
+
+        # caculate non-zero count per factor(species)
+        count.binary <- count
+        count.binary@x <- numeric(length(count.binary@x))+1
+        groupProp <- conos:::collapseCellsByType(count.binary, cellannot) %>% t %>%
+          apply(1, function(r){
+            if(min(c(length(group1Cells),length(group2Cells), length(group3Cells))) > 0){
+              r/c(length(group1Cells),length(group2Cells), length(group3Cells))
+            } else if(length(group2Cells) > 0){
+              r/c(length(group1Cells),length(group2Cells))
+            } else{
+              r/c(length(group1Cells),length(group3Cells))
+            }}) %>% t
+        colnames(groupProp) <- paste(names(table(cellannot)), c("propIn"), sep="_")
+
+        # caculate non-zero count per factor for cellsOUT groups
+        cellsOutCount <- count[rownames(count) %in% cellsOut, ]
+        cellsOutCount@x <- numeric(length(cellsOutCount@x))+1
+        groupOutProp <- conos:::collapseCellsByType(cellsOutCount, cellannotOut) %>% t %>%
+          apply(1, function(r){r/c(length(group1OutCells),
+                                   length(group2OutCells), length(group3OutCells))}) %>% t
+        colnames(groupOutProp) <- paste(prefix, c("propOut"), sep="_")
+        geneFeatures <- cbind(expByGroup, groupProp, groupOutProp) %>% as.data.frame
+        # remove NA rows if any
+        if(length(which(is.na(geneFeatures))) > 0){
+          geneFeatures <- geneFeatures[!is.na(geneFeatures[, 1]), ]
+        }
+
+        if(min(c(length(group1Cells), length(group2Cells), length(group3Cells)))>0){
+          # filtering criteria (expression of any species larger than 0.05,
+          #  expression proportion larger than 0.15 quantile for each species)
+          geneFeatures <- geneFeatures[geneFeatures[, 1]>quantile(geneFeatures[, 1])[2] &
+                                         geneFeatures[, 2]>quantile(geneFeatures[, 2])[2]
+                                       & geneFeatures[, 3]>quantile(geneFeatures[, 3])[2], ]
+          geneFeatures <- geneFeatures[geneFeatures[, 4] > 0.3 &
+                                         geneFeatures[, 5] > 0.3 &
+                                         geneFeatures[, 6] > 0.3,]
+          geneFeatures$gene <- rownames(geneFeatures)
+
+          # proportion test
+          countSelected <- count[, colnames(count) %in% rownames(geneFeatures)]
+          propTest1 <- propTestGene(countSelected, group1Cells, group2Cells, n.cores=n.cores)
+          propTest1 <- propTest1[!is.na(propTest1$stat), ]
+          propTest2 <- propTestGene(countSelected, group1Cells, group3Cells, n.cores=n.cores)
+          propTest2 <- propTest1[!is.na(propTest2$stat), ]
+
+          # combine features
+          propTest1 <- merge(propTest1, geneFeatures, by=c("gene"))
+          propTest2 <- merge(propTest2, geneFeatures, by=c("gene"))
+
+          # summarize divergence
+          div1 <- propTest1[propTest1$p.adjust < 1e-5, ]
+          div2 <- propTest2[propTest2$p.adjust < 1e-5, ]
+          conv1 <- propTest1[propTest1$p.adjust >= 1e-5, ]
+          conv2 <- propTest1[propTest2$p.adjust >= 1e-5, ]
+
+          conservation <- c(length(intersect(conv1$gene, conv2$gene)),
+                            (min(nrow(propTest1), nrow(propTest2))-length(intersect(conv1$gene, conv2$gene))-length(intersect(div1$gene, div2$gene))),
+                            length(intersect(div1$gene, div2$gene)))
+          names(conservation) <- c("conserved in 3", "conserved in 2", "divergent")
+          attr(d[[i]], "proptest") <- list(propTest1=propTest1, propTest2=propTest2)
+          attr(d[[i]], "conservation") <- conservation
+        } else{
+          geneFeatures <- geneFeatures[geneFeatures[, 1]>quantile(geneFeatures[, 1])[2] &
+                                         geneFeatures[, 2]>quantile(geneFeatures[, 2])[2], ]
+          geneFeatures <- geneFeatures[geneFeatures[, 4] > 0.3 &
+                                         geneFeatures[, 5] > 0.3,]
+          geneFeatures$gene <- rownames(geneFeatures)
+
+          # proportion test
+          countSelected <- count[, colnames(count) %in% rownames(geneFeatures)]
+
+          if(length(group3Cells) == 0){
+            propTest1 <- propTestGene(countSelected, group1Cells, group2Cells, n.cores=n.cores)
+            propTest1 <- propTest1[!is.na(propTest1$stat), ]
+          } else{
+            propTest1 <- propTestGene(countSelected, group1Cells, group3Cells, n.cores=n.cores)
+            propTest1 <- propTest1[!is.na(propTest1$stat), ]
+          }
+
+          # combine features
+          propTest1 <- merge(propTest1, geneFeatures, by=c("gene"))
+
+          # summarize conservation
+          div1 <- propTest1[propTest1$p.adjust < 1e-5, ]
+          conv1 <- propTest1[propTest1$p.adjust >= 1e-5, ]
+
+          conservation <- c(0, nrow(conv1), nrow(div1))
+          names(conservation) <- c("conserved in 3", "conserved in 2", "divergent")
+          attr(d[[i]], "proptest") <- list(propTest1=propTest1)
+          attr(d[[i]], "conservation") <- conservation
+        }
+        print(attr(d[[i]], "size"))
+        d[[i]] <- propTestNode(d[[i]])
+      }
+    }
+    return(d)
+  }
+  d <- propTestNode(d)
+  return(d)
+}
+
+#' caculate divergent ratio for each node in the tree based on associated genes
+#'   based on binormial proportion test
+#' @param d dendrogram obj
+#' @param count combined raw count matrix
+#' @param prefix cell prefix to make the comparison
+#' @param sampleCells sample cells in each node based on the cell composition in leaf node
+#' @param group factor contains cells and its correspondent groups
+#' @return dendrogram obj with divergence ratio added to each node
+TreeDivergentRatio <- function(d, count, prefix=c("human", "marmoset", "mouse"), sampleCells=TRUE,
+                               group=NULL, n.cores=20){
+  if(length(prefix) < 3){
+    stop("currently only support two group comparison")
+  }
+  calculate_divergence <- function(d){
+    for(i in seq_len(length(d))){
+      if(!is.leaf(d[[i]])){
+        cells <- attr(d[[i]], "nodesinfo")
+        assGenes <- attr(d[[i]], "assGenes")$Gene
+        if(sampleCells){
+          if(is.null(group)){
+            stop("please provide cell annotation")
+          }
+          cells <- sampleCells(cells, groups)
+        }
+
+        group1Cells <- cells[grep(prefix[1], cells)]
+        group2Cells <- cells[grep(prefix[2], cells)]
+        group3Cells <- cells[grep(prefix[3], cells)]
+        assCount <- count[, assGenes]
+        divergentRatio1 <- 0
+        divergentRatio2 <- 0
+
+        if(length(group2Cells) > 0){
+          propTest1 <- propTestGene(assCount, group1Cells, group2Cells, n.cores=n.cores)
+          if(length(which(is.na(propTest1$p.value))) > 0){
+            propTest1 <- propTest2[-1*which(is.na(propTest1$p.value)), ]
+          }
+          divergentRatio1 <- round(nrow(propTest1[propTest1$p.adjust<1e-5, ])/length(assGenes), 2)
+        }
+
+        if(length(group3Cells) > 0){
+          propTest2 <- propTestGene(assCount, group1Cells, group3Cells, n.cores=n.cores)
+          if(length(which(is.na(propTest2$p.value))) > 0){
+            propTest2 <- propTest2[-1*which(is.na(propTest2$p.value)), ]
+          }
+          divergentRatio2 <- round(nrow(propTest2[propTest2$p.adjust<1e-5, ])/length(assGenes), 2)
+        }
+        attr(d[[i]], "PropTest") <- list(test1=propTest1, test2=propTest2)
+        attr(d[[i]], "divergentRatio") <- c(divergentRatio1, divergentRatio2)
+        d[[i]] <- calculate_divergence(d[[i]])
+      }
+    }
+    return(d)
+  }
+  d <- calculate_divergence(d)
   return(d)
 }
 
