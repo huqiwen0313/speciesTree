@@ -1721,7 +1721,7 @@ getClusters <- function(d, plotTree=TRUE, plotleafLabel=FALSE, upperlevelannot=N
           branch2WithinSpeciesPercent <- max(branch2WithinSpeciesAttr$human, branch2WithinSpeciesAttr$marmo,
                                              branch2WithinSpeciesAttr$mouse)
           # if the composition of any of the leaf branch larger than cutoff, split
-          if(branch1WithinSpciesPercent >= withinSpeciesStopCutoff | branch2WithinSpeciesPercent >= withinSpeciesStopCutoff){
+          if(branch1WithinSpeciesPercent >= withinSpeciesStopCutoff | branch2WithinSpeciesPercent >= withinSpeciesStopCutoff){
             if(!is.leaf(d[[1]])){
               branch.attributes <- attributes(d[[1]])
               leafsize <- length(labels(d[[1]]))
