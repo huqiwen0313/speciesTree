@@ -590,7 +590,7 @@ TreeStabilityFlat <- function(cls.groups, cls.subsamples, n.cores=10){
 AddTreeAttribute <- function(d, fac, leafContent){
     fac <- as.factor(fac);
     if(length(levels(fac))>3) stop("factor with more than 3 levels are not supported")
-    if(length(levels(fac))<2) stop("factor with less than 2 levels are not supported")
+    #if(length(levels(fac))<2) stop("factor with less than 2 levels are not supported")
 
     totalCells <- table(fac)
 
@@ -601,6 +601,7 @@ AddTreeAttribute <- function(d, fac, leafContent){
         attr(d,'cc') <- cc
         size <- length(lc)
         attr(d, 'size') <- size
+        attr(d, "nodesinfo") <- leafContent[[as.numeric(attr(d,'label'))]]
         return(d)
       } else {
         oa <- attributes(d)
@@ -610,6 +611,8 @@ AddTreeAttribute <- function(d, fac, leafContent){
         attr(d,'cc') <- cc
         size <- attr(d[[1]],'size')+attr(d[[2]],'size')
         attr(d, 'size') <- size
+        leafs <- c(attr(d[[1]],'nodesinfo'), attr(d[[2]],'nodesinfo'))
+        attr(d,"nodesinfo") <- leafs
         return(d)
       }
     }
@@ -2320,7 +2323,7 @@ GetDifferentialGenes <- function(count, groups=NULL, upregulated.only=FALSE, z.t
     stop("Please provide cell and group information")
   }
 
-  cm <- t(count)
+  cm <- Matrix::t(count)
   #taking subset of cells
   cm <- cm[rownames(cm) %in% names(groups),]
   groups <- as.factor(groups[match(rownames(cm), names(groups))])
@@ -2435,18 +2438,36 @@ AddMarkersToTree <- function(d, count, addAUC=TRUE){
 #' @param prefix based factor(species) to extract associated genes
 #'
 #' @export
-AddassGeneToTree <- function(d, count, prefix="human", ntop=30){
+AddassGeneToTree <- function(d, count, prefix="human", ntop=30, addAUC=TRUE){
   calculate_marker <- function(d){
     for(i in seq_len(length(d))){
-      if(!is.leaf(d[[i]])){
+      #if(!is.leaf(d[[i]])){
+      if(!is.null(attr(d[[i]], "height"))){
+        #print(i)
         cells <- attr(d[[i]], "nodesinfo")
         cells <- cells[cells %in% colnames(count)]
         cellsOut <- colnames(count)[-1*which(colnames(count) %in% cells)]
         groups <- setNames(c(rep("1", length(cells)), rep("2", length(cellsOut))), c(cells, cellsOut))
 
         #print("calculate markers for each node................")
-        diffgene.list <- GetDifferentialGenes(count, groups=groups, ntop=ntop)
-        attr(d[[i]], "assGenes") <- diffgene.list[[1]]
+        diffgene.list <- GetDifferentialGenes(count, groups=groups, ntop=ntop, upregulated.only=TRUE)
+        markers <- diffgene.list[[1]]
+        if(length(which(is.na(markers$Gene)))>0){
+          markers <- markers[-which(is.na(markers$Gene)), ]
+        }
+        
+        if(addAUC){
+          #print("run random forest on markers based on 3-fold CV......")
+          counts <- Matrix::t(count)
+          counts.bin <- (counts[names(groups), markers$Gene, drop=F] > 0)
+          counts.bin.Genesums <- Matrix::colSums(counts.bin)
+          counts.bin.Groupsums <- Matrix::colSums(counts.bin & (groups == names(table(groups))))
+          auc <- apply(counts.bin, 2, function(col) pROC::auc(as.integer(groups), as.integer(col)))
+          markers$auc <- auc
+          attr(d[[i]], "auc") <- mean(auc)
+        }
+        attr(d[[i]], "assGenes") <- markers
+        
         d[[i]] <- calculate_marker(d[[i]])
       }
     }
