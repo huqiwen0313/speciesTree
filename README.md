@@ -2,7 +2,7 @@
 Tree based method for cross-species data integration
 
 speciesTree is initially designed for cross-species data analysis to identify homologous groups and evolutional patterns. 
-The approach is used in [BICCN](https://biccn.org/) cross species analysis to identify robust homologous groups in human, mouse and marmoset. 
+The approach is used in [BICCN](https://www.biorxiv.org/content/10.1101/2020.03.31.016972v2.abstract) cross species analysis to identify robust homologous groups in human, mouse and marmoset. 
 The method can be extended to the other analysis as well, such as identifying roubust clusters in single and multi-modal datasets.
 
 
@@ -22,7 +22,8 @@ library(speciesTree)
 ```
 
 ## Quick start
-* build robust homologous clusters across species
+* build robust homologous clusters across species using dynamic prunning
+[example_data](https://drive.google.com/file/d/1v80NKIQCFBmRtV9n3iIu20xkEADlX6SM/view?usp=sharing)
 ```r
 library(speciesTree)
 library(conos)
