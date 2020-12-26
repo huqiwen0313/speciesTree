@@ -1974,7 +1974,7 @@ getLeafClusters <- function(dend, renameClusterlabel=FALSE){
 #' @param plot plot the built tree or not
 #' @export
 buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups, mappingcells=FALSE, cellannot=NULL, species,
-                             upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE){
+                             upperlevelannot=NULL, renameCluster=TRUE, plot=TRUE, n.cores=10){
   dendr <- TransferDend(dend, renameCluster=renameCluster, cls.groups = cls.groups)
   cls.groups <- dendr$new.groups
 
@@ -1983,9 +1983,8 @@ buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups
 
   if(!is.null(subsampleClusters)){
     subsampled.dend <- subSampleTree(expMatrix, subsample.groups=subsampleClusters)
-    stability.measurements <- TreeStabilityDend(dend, cls.groups=cls.groups, subsampled.dend, n.cores=10)
+    stability.measurements <- TreeStabilityDend(dend, cls.groups=cls.groups, subsampled.dend, n.cores=n.cores)
     dend <- stability.measurements$dendrogram
-    #stability.measurements <- TreeStabilityDend(dend, cls.groups, subsamples, n.cores=10)
   } else{
     stability.measurements = NULL
   }
@@ -2007,7 +2006,6 @@ buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups
   if(!is.null(upperlevelannot[1])){
     dend <- UpperLevelInfo(dend, cellannot=upperlevelannot, leafcontent, propCutoff = 0.1)
     upperLevelnodes <- getUpperLevelNode(dend, cutoff=0.65)
-
     # normalize Tree
     dend <- NormTree(dend, upperLevelnodes, upperlevelannot, species)
     dend <- dendSetColorByNormMixing(dend)
@@ -2018,17 +2016,17 @@ buildSpeciesTree <- function(dend, expMatrix, subsampleClusters=NULL, cls.groups
     upperLevelnodes = NULL
   }
   if(plot){
-    if(!is.null(upperlevelannot) & !is.null(subsamples)){
-      par(cex=1, mar=c(20, 5, 0, 10))
+    if(!is.null(upperlevelannot) & !is.null(subsampleClusters)){
+      #par(cex=1, mar=c(20, 5, 0, 10))
       plot(dend)
       text(upperLevelnodes$xy, labels=upperLevelnodes$upperlabel, adj=c(0.5, -1.2), cex=0.8, col="red")
-      text(get_nodes_xy(dend), labels=get_nodes_attr(dend, "stability"), adj=c(0.4,0.4), cex=0.3, col="red")
+      text(get_nodes_xy(dend), labels=get_nodes_attr(dend, "stability"), adj=c(0.4,0.4), cex=0.5, col="red")
     } else if(!is.null(upperlevelannot)){
-      par(cex=1, mar=c(20, 5, 0, 10))
+      #par(cex=1, mar=c(20, 5, 0, 10))
       plot(dend)
-      text(get_nodes_xy(dend), labels=get_nodes_attr(dend, "stability"), adj=c(0.4,0.4), cex=0.3, col="red")
-    } else if(!is.null(subsamples)){
-      par(cex=1, mar=c(20, 5, 0, 10))
+      text(get_nodes_xy(dend), labels=get_nodes_attr(dend, "stability"), adj=c(0.4,0.4), cex=0.5, col="red")
+    } else if(!is.null(subsampleClusters)){
+      #par(cex=1, mar=c(20, 5, 0, 10))
       plot(dend)
       text(stability.measurements$stability.loc, labels=stability.measurements$stability.labels,
            adj=c(0.4, 0.1), cex=0.35, col="red")
