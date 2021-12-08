@@ -84,6 +84,7 @@ rleiden.detection <- function(graph, K=2, renameCluter=TRUE, n.cores=1,
 cluster.matrix.expression.distances <- function(counts, groups=NULL, useVariablegenes=F, variableGenes=NULL, dist='cor',
                                                 use.single.cell.comparisons=FALSE, use.scaled.data=FALSE, min.cluster.size=1, max.n.cells=Inf, n.cells=200) {
   require(abind)
+  require(sccore)
   if(is.null(groups)) {
     stop('no groups specified')
   } else {
@@ -140,7 +141,7 @@ cluster.matrix.expression.distances <- function(counts, groups=NULL, useVariable
     }, mc.cores=10) %>% abind(along=3) %>% apply(c(1,2),median,na.rm=T)
 
   } else{
-    tc <- conos:::colSumByFactor(counts, cl);
+    tc <- sccore:::colSumByFactor(counts, cl);
     tc <- tc[-1,,drop=F]  # omit NA cells
     # correlation distance
     if(dist=='JS') {
