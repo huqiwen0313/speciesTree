@@ -399,3 +399,34 @@ PlotTreeConservationPie <- function(d){
   })
 }
 
+#'
+plotGGHeatmap <- function(df, legend.title=""){
+  df %<>% tibble::as_tibble(rownames=".id.") %>%
+    reshape2::melt(id.vars=".id.") %>%
+    dplyr::mutate(.id.=factor(.id., levels=rev(rownames(df))), variable=factor(variable, levels=colnames(df)))
+  
+  ggplot(df) + geom_tile(aes(x=variable, y=.id., fill=value), colour = "grey50") +
+    theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5),
+          axis.text=element_text(size=8), axis.ticks=element_blank(), axis.title=element_blank()) +
+    guides(fill=guide_colorbar(title=legend.title, title.position="left", title.theme=element_text(angle=90, hjust=0.5))) +
+    scale_y_discrete(position="right", expand=c(0, 0)) +
+    scale_x_discrete(expand=c(0, 0))
+}
+
+
+#' plot expression based on fold change
+#' @param count, rows are genes, columns are cells
+plotExpression <- function(markers, celltypes, annotation, count, title=NULL, scale.max=NULL){
+  
+  annotation <- annotation %>% .[. %in% celltypes] %>% factor(levels=celltypes)
+  
+  r <- estimateFoldChanges(t(count), markers, annotation) %>% pmax(0)
+  if(!is.null(scale.max)){
+    r[r>scale.max] <- scale.max
+  }
+  plotGGHeatmap(r, legend.title="log2 fold-change") + scale_fill_distiller(palette="RdYlBu") + ggtitle(title)
+  
+}
+
+
+

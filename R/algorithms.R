@@ -158,3 +158,120 @@ cluster.matrix.expression.distances <- function(counts, groups=NULL, useVariable
   }
   return(tcd)
 }
+
+#'
+estimateFoldChanges <- function(cm, markers, annotation) {
+  annotation %<>% .[intersect(names(.), rownames(cm))]
+  cm %<>% .[names(annotation), markers]
+  mean.mtx <- split(1:length(annotation), annotation) %>%
+    sapply(function(ids) Matrix::colMeans(cm[ids,]))
+  
+  if(ncol(mean.mtx) > 2){
+    fold.change.mtx <- 1:ncol(mean.mtx) %>%
+      sapply(function(i) log2(1e-10 + mean.mtx[,i]) - log2(1e-10 + rowMeans(mean.mtx[,-i]))) %>%
+      `colnames<-`(colnames(mean.mtx))
+  } else{
+    fold.change.mtx <- 1:ncol(mean.mtx) %>%
+      sapply(function(i) log2(1e-10 + mean.mtx[,i]) - log2(1e-10 + mean.mtx[,-i])) %>%
+      `colnames<-`(colnames(mean.mtx))
+  }
+  
+  return(fold.change.mtx)
+}
+
+
+#' caculate model performance
+modelPerformance <- function(pred, pred_prob, class, cat){
+  
+  confusion <- as.matrix(table(class, pred, deparse.level = 0))
+  
+  if(cat > 2){
+    n <- sum(confusion) # number of instances
+    nc <- nrow(confusion) # number of classes
+    diag <- diag(confusion) # number of correctly classified instances per class
+    accuracy <- sum(diag)/sum(confusion)
+    rowsums <- apply(confusion, 1, sum) # number of instances per class
+    colsums <- apply(confusion, 2, sum) # number of predictions per class
+    p <- rowsums / n # distribution of instances over the actual classes
+    q <- colsums / n # distribution of instances over the predicted classes
+    precision <- diag / colsums
+    recall <- diag / rowsums
+    f1 <- 2 * precision * recall / (precision + recall)
+    macroPrecision <- mean(precision, na.rm = T)
+    macroRecall <- mean(recall, na.rm = T)
+    macroF1 <- mean(f1, na.rm = T)
+    return(data.frame(accuracy = accuracy, macroPrecision = macroPrecision,
+                      macrorecall = macroRecall, macrof1 = macroF1))
+  } else {
+    accuracy <- (confusion[1,1] + confusion[2,2]) / sum(confusion)
+    precision <- confusion[1,1] / (confusion[1,1] + confusion[1,2])
+    recall <- confusion[1,1] / (confusion[1,1] + confusion[2,1])
+    f1 <- 2 * precision * recall / (precision + recall)
+    auc <- pROC::auc(pROC::roc(class, pred_prob))[1]
+    return(data.frame(accuracy = accuracy, Precision = precision,
+                      recall = recall, f1 = f1, auc = auc))
+  }
+}
+
+
+
+#' train classifier based on genesets
+#' @param feature.matrix provided matrix for training, rows are genes, columns are cells
+trainClassifier <- function(markers, annotation, feature.matrix, model="rf", subsample=T, ncells=200,
+                            n.core=10){
+  require(doParallel)
+  
+  feature.matrix <- feature.matrix[markers, names(annotation)]
+  split <- train_test_split(t(feature.matrix), trainSize=0.8)
+  train <- split$train
+  test <- split$test
+  
+  train.label <- annotation[match(rownames(train), names(annotation))]
+  test.label <- annotation[match(rownames(test), names(annotation))]
+  
+  if(subsample){
+    train.index <- sample(1:nrow(train), ncells, replace = T)
+    test.index <- sample(1:nrow(test), ncells, replace = T)
+    
+    train <- train[train.index, ]
+    test <- test[test.index, ]
+    train.label <- train.label[train.index]
+    test.label <- test.label[test.index]
+  }
+  
+  if(model == "rf"){
+    if(n.core>1){
+      cl <- makePSOCKcluster(n.core)
+      registerDoParallel(cl)
+      
+      rf <- caret::train(as.matrix(train), as.factor(train.label), method="rf",
+                       trControl = caret::trainControl(method = "cv",number = 3))
+      
+      stopCluster(cl)
+    } else{
+      rf <- caret::train(as.matrix(train), as.factor(train.label), method="rf",
+                         trControl = caret::trainControl(method = "cv",number = 3))
+    }
+    
+    pred <- predict(rf, test)
+    pred_prob <- predict(rf, test, "prob")
+    
+    perf.res <- modelPerformance(pred, pred_prob[, 1], test.label, cat=2)
+  }
+  
+  return(list(model=rf, perf.res=perf.res))
+}
+
+#' function to split train-test sets
+train_test_split <- function(data, trainSize=0.8){
+  train.size <- floor(nrow(data) * trainSize)
+  train.index <- sample(nrow(data), train.size, replace=F)
+  
+  train <- data[train.index, ]
+  test <- data[-train.index, ]
+  
+  return(list(train=train, test=test))
+}
+
+#' implement rank-based normalization
+#' 
